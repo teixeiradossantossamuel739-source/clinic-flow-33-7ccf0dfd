@@ -3,7 +3,16 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
-import Index from "./pages/Index";
+import HomePage from "./pages/HomePage";
+import SpecialtiesPage from "./pages/SpecialtiesPage";
+import ProfessionalsPage from "./pages/ProfessionalsPage";
+import BookingPage from "./pages/BookingPage";
+import AdminDashboard from "./pages/admin/AdminDashboard";
+import AdminAgenda from "./pages/admin/AdminAgenda";
+import AdminPatients from "./pages/admin/AdminPatients";
+import AdminServices from "./pages/admin/AdminServices";
+import AdminReports from "./pages/admin/AdminReports";
+import AdminSettings from "./pages/admin/AdminSettings";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -15,8 +24,20 @@ const App = () => (
       <Sonner />
       <BrowserRouter>
         <Routes>
-          <Route path="/" element={<Index />} />
-          {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+          {/* Public Routes */}
+          <Route path="/" element={<HomePage />} />
+          <Route path="/especialidades" element={<SpecialtiesPage />} />
+          <Route path="/profissionais" element={<ProfessionalsPage />} />
+          <Route path="/agendar" element={<BookingPage />} />
+          
+          {/* Admin Routes */}
+          <Route path="/admin" element={<AdminDashboard />} />
+          <Route path="/admin/agenda" element={<AdminAgenda />} />
+          <Route path="/admin/pacientes" element={<AdminPatients />} />
+          <Route path="/admin/servicos" element={<AdminServices />} />
+          <Route path="/admin/relatorios" element={<AdminReports />} />
+          <Route path="/admin/configuracoes" element={<AdminSettings />} />
+          
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>
