@@ -59,6 +59,27 @@ serve(async (req) => {
       throw new Error("Missing required fields");
     }
 
+    // Check if time slot is still available
+    const { data: existingAppointments, error: checkError } = await supabaseClient
+      .from('appointments')
+      .select('id')
+      .eq('professional_id', professionalId)
+      .eq('appointment_date', appointmentDate)
+      .eq('appointment_time', appointmentTime)
+      .not('status', 'eq', 'cancelled');
+
+    if (checkError) {
+      logStep("Error checking availability", { error: checkError });
+      throw new Error("Failed to check availability");
+    }
+
+    if (existingAppointments && existingAppointments.length > 0) {
+      logStep("Time slot already taken", { existingAppointments });
+      throw new Error("Este horário já está reservado. Por favor, escolha outro horário.");
+    }
+
+    logStep("Time slot is available");
+
     const stripe = new Stripe(stripeKey, { apiVersion: "2025-08-27.basil" });
 
     // Check if customer exists
@@ -76,6 +97,7 @@ serve(async (req) => {
       .from('appointments')
       .insert({
         professional_id: professionalId,
+        professional_uuid: professionalId,
         patient_name: patientName,
         patient_email: patientEmail,
         patient_phone: patientPhone || '',
