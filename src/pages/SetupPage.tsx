@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
-import { Loader2, CheckCircle2, XCircle, Users } from 'lucide-react';
+import { Loader2, CheckCircle2, XCircle, Users, Shield, Briefcase } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface TestUser {
@@ -10,29 +10,25 @@ interface TestUser {
   fullName: string;
   role: 'admin' | 'funcionario' | 'cliente';
   description: string;
+  icon: React.ReactNode;
 }
 
 const testUsers: TestUser[] = [
   {
     email: 'admin@teste.com',
-    password: 'teste',
+    password: 'teste123',
     fullName: 'Administrador',
     role: 'admin',
-    description: 'Usuário com acesso total ao sistema',
+    description: 'Acesso total ao sistema',
+    icon: <Shield className="h-4 w-4" />,
   },
   {
     email: 'funcionario@teste.com',
-    password: 'teste',
+    password: 'teste123',
     fullName: 'Funcionário Teste',
     role: 'funcionario',
-    description: 'Usuário operacional da clínica',
-  },
-  {
-    email: 'cliente@teste.com',
-    password: 'teste',
-    fullName: 'Cliente Teste',
-    role: 'cliente',
-    description: 'Usuário final (paciente)',
+    description: 'Acesso operacional da clínica',
+    icon: <Briefcase className="h-4 w-4" />,
   },
 ];
 
@@ -101,8 +97,16 @@ export default function SetupPage() {
             </div>
             <div>
               <h1 className="text-2xl font-bold">Setup - Usuários de Teste</h1>
-              <p className="text-clinic-text-secondary">Crie os usuários para ambiente de testes</p>
+              <p className="text-clinic-text-secondary">Crie os usuários administrativos para testes</p>
             </div>
+          </div>
+
+          <div className="p-4 rounded-lg bg-info/10 border border-info/20 mb-6">
+            <p className="text-sm text-info font-medium mb-1">Nota sobre Clientes</p>
+            <p className="text-xs text-clinic-text-secondary">
+              Clientes não precisam ser criados aqui. Eles acessam o sistema informando Nome, WhatsApp e Email, 
+              e recebem um link de acesso por email (magic link).
+            </p>
           </div>
 
           <div className="space-y-4 mb-6">
@@ -113,15 +117,20 @@ export default function SetupPage() {
               >
                 <div className="flex-1">
                   <div className="flex items-center gap-2">
-                    <span className="font-medium">{user.fullName}</span>
-                    <span className="text-xs px-2 py-0.5 rounded-full bg-clinic-primary/10 text-clinic-primary capitalize">
-                      {user.role}
-                    </span>
+                    <div className="h-8 w-8 rounded-lg bg-clinic-primary/10 flex items-center justify-center text-clinic-primary">
+                      {user.icon}
+                    </div>
+                    <div>
+                      <span className="font-medium">{user.fullName}</span>
+                      <span className="ml-2 text-xs px-2 py-0.5 rounded-full bg-clinic-primary/10 text-clinic-primary capitalize">
+                        {user.role}
+                      </span>
+                    </div>
                   </div>
-                  <p className="text-sm text-clinic-text-muted">{user.email}</p>
-                  <p className="text-xs text-clinic-text-secondary mt-1">{user.description}</p>
+                  <p className="text-sm text-clinic-text-muted mt-1 ml-10">{user.email}</p>
+                  <p className="text-xs text-clinic-text-secondary mt-1 ml-10">{user.description}</p>
                   {errors[user.email] && (
-                    <p className="text-xs text-destructive mt-1">{errors[user.email]}</p>
+                    <p className="text-xs text-destructive mt-1 ml-10">{errors[user.email]}</p>
                   )}
                 </div>
                 <div className="flex items-center gap-2">
