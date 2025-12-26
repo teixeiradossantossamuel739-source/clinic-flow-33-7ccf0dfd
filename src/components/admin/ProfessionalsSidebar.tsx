@@ -15,7 +15,6 @@ import {
   Apple,
   User
 } from 'lucide-react';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 interface Professional {
   id: string;
@@ -137,120 +136,110 @@ export function ProfessionalsSidebar({ selectedId, onSelect }: ProfessionalsSide
   }
 
   return (
-    <TooltipProvider>
-      <div className="w-64 bg-background border-r border-border flex flex-col">
-        <div className="p-4 border-b border-border">
-          <h2 className="font-semibold text-sm text-muted-foreground uppercase tracking-wide">
-            Profissionais
-          </h2>
-        </div>
-
-        <ScrollArea className="flex-1">
-          <div className="p-2">
-            {/* All professionals option */}
-            <button
-              onClick={() => onSelect(null)}
-              className={cn(
-                'w-full flex items-center gap-3 p-3 rounded-lg transition-colors text-left',
-                selectedId === null
-                  ? 'bg-primary/10 text-primary'
-                  : 'hover:bg-muted'
-              )}
-            >
-              <div className={cn(
-                'h-10 w-10 rounded-full flex items-center justify-center',
-                selectedId === null ? 'bg-primary text-primary-foreground' : 'bg-muted'
-              )}>
-                <Users className="h-5 w-5" />
-              </div>
-              <div>
-                <p className="font-medium text-sm">Todos</p>
-                <p className="text-xs text-muted-foreground">{professionals.length} profissionais</p>
-              </div>
-            </button>
-
-            {/* Grouped professionals by profession */}
-            {Object.entries(groupedProfessionals).map(([profession, profs]) => {
-              const config = PROFESSION_CONFIG[profession] || { label: profession, icon: User };
-              const Icon = config.icon;
-              const isOpen = openGroups.has(profession);
-              const hasSelectedProfessional = profs.some(p => p.id === selectedId);
-
-              return (
-                <Collapsible
-                  key={profession}
-                  open={isOpen}
-                  onOpenChange={() => toggleGroup(profession)}
-                  className="mt-2"
-                >
-                  <CollapsibleTrigger className={cn(
-                    'w-full flex items-center gap-3 p-3 rounded-lg transition-colors text-left hover:bg-muted group',
-                    hasSelectedProfessional && 'bg-primary/5'
-                  )}>
-                    <div className={cn(
-                      'h-10 w-10 rounded-full flex items-center justify-center bg-muted',
-                      hasSelectedProfessional && 'bg-primary/20'
-                    )}>
-                      <Icon className={cn(
-                        'h-5 w-5',
-                        hasSelectedProfessional ? 'text-primary' : 'text-muted-foreground'
-                      )} />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="font-medium text-sm">{config.label}</p>
-                      <p className="text-xs text-muted-foreground">{profs.length} profissional{profs.length !== 1 ? 'is' : ''}</p>
-                    </div>
-                    <ChevronDown className={cn(
-                      'h-4 w-4 text-muted-foreground transition-transform',
-                      isOpen && 'rotate-180'
-                    )} />
-                  </CollapsibleTrigger>
-
-                  <CollapsibleContent className="pl-4">
-                    {profs.map((professional) => (
-                      <Tooltip key={professional.id}>
-                        <TooltipTrigger asChild>
-                          <button
-                            onClick={() => onSelect(professional.id)}
-                            className={cn(
-                              'w-full flex items-center gap-3 p-3 rounded-lg transition-colors text-left mt-1',
-                              selectedId === professional.id
-                                ? 'bg-primary/10 text-primary'
-                                : 'hover:bg-muted'
-                            )}
-                          >
-                            <Avatar className="h-9 w-9">
-                              <AvatarImage src={professional.avatar_url || undefined} alt={professional.name} />
-                              <AvatarFallback className={cn(
-                                'text-xs font-medium',
-                                selectedId === professional.id && 'bg-primary text-primary-foreground'
-                              )}>
-                                {getInitials(professional.name)}
-                              </AvatarFallback>
-                            </Avatar>
-                            <div className="flex-1 min-w-0">
-                              <p className="font-medium text-sm truncate">{professional.name}</p>
-                              <p className="text-xs text-muted-foreground truncate">
-                                {formatSpecialty(professional.specialty_id)}
-                              </p>
-                            </div>
-                          </button>
-                        </TooltipTrigger>
-                        <TooltipContent side="right">
-                          <p className="font-medium">{professional.name}</p>
-                          <p className="text-xs text-muted-foreground">
-                            {formatSpecialty(professional.specialty_id)}
-                          </p>
-                        </TooltipContent>
-                      </Tooltip>
-                    ))}
-                  </CollapsibleContent>
-                </Collapsible>
-              );
-            })}
-          </div>
-        </ScrollArea>
+    <div className="w-64 bg-background border-r border-border flex flex-col">
+      <div className="p-4 border-b border-border">
+        <h2 className="font-semibold text-sm text-muted-foreground uppercase tracking-wide">
+          Profissionais
+        </h2>
       </div>
-    </TooltipProvider>
+
+      <ScrollArea className="flex-1">
+        <div className="p-2">
+          {/* All professionals option */}
+          <button
+            onClick={() => onSelect(null)}
+            className={cn(
+              'w-full flex items-center gap-3 p-3 rounded-lg transition-colors text-left',
+              selectedId === null
+                ? 'bg-primary/10 text-primary'
+                : 'hover:bg-muted'
+            )}
+          >
+            <div className={cn(
+              'h-10 w-10 rounded-full flex items-center justify-center',
+              selectedId === null ? 'bg-primary text-primary-foreground' : 'bg-muted'
+            )}>
+              <Users className="h-5 w-5" />
+            </div>
+            <div>
+              <p className="font-medium text-sm">Todos</p>
+              <p className="text-xs text-muted-foreground">{professionals.length} profissionais</p>
+            </div>
+          </button>
+
+          {/* Grouped professionals by profession */}
+          {Object.entries(groupedProfessionals).map(([profession, profs]) => {
+            const config = PROFESSION_CONFIG[profession] || { label: profession, icon: User };
+            const Icon = config.icon;
+            const isOpen = openGroups.has(profession);
+            const hasSelectedProfessional = profs.some(p => p.id === selectedId);
+
+            return (
+              <Collapsible
+                key={profession}
+                open={isOpen}
+                onOpenChange={() => toggleGroup(profession)}
+                className="mt-2"
+              >
+                <CollapsibleTrigger className={cn(
+                  'w-full flex items-center gap-3 p-3 rounded-lg transition-colors text-left hover:bg-muted group',
+                  hasSelectedProfessional && 'bg-primary/5'
+                )}>
+                  <div className={cn(
+                    'h-10 w-10 rounded-full flex items-center justify-center bg-muted',
+                    hasSelectedProfessional && 'bg-primary/20'
+                  )}>
+                    <Icon className={cn(
+                      'h-5 w-5',
+                      hasSelectedProfessional ? 'text-primary' : 'text-muted-foreground'
+                    )} />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium text-sm">{config.label}</p>
+                    <p className="text-xs text-muted-foreground">{profs.length} profissional{profs.length !== 1 ? 'is' : ''}</p>
+                  </div>
+                  <ChevronDown className={cn(
+                    'h-4 w-4 text-muted-foreground transition-transform',
+                    isOpen && 'rotate-180'
+                  )} />
+                </CollapsibleTrigger>
+
+                <CollapsibleContent className="pl-4">
+                  {profs.map((professional) => (
+                    <button
+                      key={professional.id}
+                      onClick={() => onSelect(professional.id)}
+                      className={cn(
+                        'w-full flex items-center gap-3 p-3 rounded-lg transition-colors text-left mt-1',
+                        selectedId === professional.id
+                          ? 'bg-primary/10 text-primary'
+                          : 'hover:bg-muted'
+                      )}
+                      title={`${professional.name} - ${formatSpecialty(professional.specialty_id)}`}
+                    >
+                      <Avatar className="h-9 w-9">
+                        <AvatarImage src={professional.avatar_url || undefined} alt={professional.name} />
+                        <AvatarFallback className={cn(
+                          'text-xs font-medium',
+                          selectedId === professional.id && 'bg-primary text-primary-foreground'
+                        )}>
+                          {getInitials(professional.name)}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium text-sm truncate">{professional.name}</p>
+                        <p className="text-xs text-muted-foreground truncate">
+                          {formatSpecialty(professional.specialty_id)}
+                        </p>
+                      </div>
+                    </button>
+                  ))}
+                </CollapsibleContent>
+              </Collapsible>
+            );
+          })}
+        </div>
+      </ScrollArea>
+    </div>
   );
 }
