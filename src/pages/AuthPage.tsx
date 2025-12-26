@@ -23,7 +23,7 @@ type LoginType = 'client' | 'staff';
 
 export default function AuthPage() {
   const navigate = useNavigate();
-  const { user, loading: authLoading, signIn, signInWithOtp } = useAuth();
+  const { user, loading: authLoading, signIn, signUpClient } = useAuth();
   
   const [loginType, setLoginType] = useState<LoginType>('client');
   const [loading, setLoading] = useState(false);
@@ -69,12 +69,17 @@ export default function AuthPage() {
         return;
       }
 
-      const { error } = await signInWithOtp(formData.email, formData.fullName, formData.whatsapp);
+      const { error } = await signUpClient(formData.email, formData.fullName, formData.whatsapp);
       if (error) {
-        toast.error(error.message);
+        if (error.message.includes('já cadastrado')) {
+          setMagicLinkSent(true);
+          toast.info('Usuário já cadastrado. Verifique seu email para acessar.');
+        } else {
+          toast.error(error.message);
+        }
       } else {
-        setMagicLinkSent(true);
-        toast.success('Link de acesso enviado para seu email!');
+        toast.success('Bem-vindo!');
+        navigate('/');
       }
     } catch (err) {
       toast.error('Erro inesperado. Tente novamente.');
@@ -204,13 +209,13 @@ export default function AuthPage() {
           {/* Client Login Form (Magic Link) */}
           {loginType === 'client' && (
             <form onSubmit={handleClientSubmit} className="space-y-4">
-              <div className="p-3 rounded-lg bg-clinic-primary/5 border border-clinic-primary/10 mb-4">
-                <div className="flex items-center gap-2 text-clinic-primary">
+              <div className="p-3 rounded-lg bg-success/10 border border-success/20 mb-4">
+                <div className="flex items-center gap-2 text-success">
                   <Sparkles className="h-4 w-4" />
-                  <span className="text-sm font-medium">Acesso sem senha</span>
+                  <span className="text-sm font-medium">Acesso rápido</span>
                 </div>
-                <p className="text-xs text-clinic-text-secondary mt-1">
-                  Enviaremos um link de acesso para seu email
+                <p className="text-xs text-muted-foreground mt-1">
+                  Preencha seus dados e acesse imediatamente
                 </p>
               </div>
 
@@ -279,7 +284,7 @@ export default function AuthPage() {
                 {loading ? (
                   <Loader2 className="h-4 w-4 animate-spin mr-2" />
                 ) : null}
-                Enviar link de acesso
+                Entrar
                 <ArrowRight className="h-4 w-4 ml-2" />
               </Button>
             </form>

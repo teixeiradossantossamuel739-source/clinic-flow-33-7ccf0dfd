@@ -23,6 +23,7 @@ interface AuthContextType {
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
   signInWithOtp: (email: string, fullName?: string, whatsapp?: string) => Promise<{ error: Error | null }>;
   signUp: (email: string, password: string, fullName: string) => Promise<{ error: Error | null }>;
+  signUpClient: (email: string, fullName: string, whatsapp: string) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
   isAdmin: boolean;
   isFuncionario: boolean;
@@ -134,12 +135,54 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         emailRedirectTo: redirectUrl,
         data: {
           full_name: fullName,
-          // Role is NOT sent here - trigger always creates as 'cliente'
-          // Admin/funcionario roles must be set via backend only
         },
       },
     });
     return { error };
+  };
+
+  // Sign up client and auto-login (generates random password)
+  const signUpClient = async (email: string, fullName: string, whatsapp: string) => {
+    const normalizedEmail = email.trim().toLowerCase();
+    const randomPassword = crypto.randomUUID();
+    
+    // Try to sign up
+    const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
+      email: normalizedEmail,
+      password: randomPassword,
+      options: {
+        data: {
+          full_name: fullName,
+          whatsapp: whatsapp,
+        },
+      },
+    });
+
+    // If user already exists, try magic link
+    if (signUpError?.message?.includes('already registered')) {
+      const { error: otpError } = await supabase.auth.signInWithOtp({
+        email: normalizedEmail,
+        options: {
+          emailRedirectTo: `${window.location.origin}/`,
+          data: {
+            full_name: fullName,
+            whatsapp: whatsapp,
+          },
+        },
+      });
+      return { error: otpError ? new Error('Usuário já cadastrado. Enviamos um link de acesso para seu email.') : null };
+    }
+
+    if (signUpError) {
+      return { error: signUpError };
+    }
+
+    // Auto-confirm is enabled, user should be logged in already
+    if (signUpData.session) {
+      return { error: null };
+    }
+
+    return { error: null };
   };
 
   const signOut = async () => {
@@ -159,6 +202,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     signIn,
     signInWithOtp,
     signUp,
+    signUpClient,
     signOut,
     isAdmin: role === 'admin',
     isFuncionario: role === 'funcionario',
