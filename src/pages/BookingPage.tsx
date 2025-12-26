@@ -4,12 +4,10 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { PublicLayout } from '@/components/layout/PublicLayout';
-import { professionals, timeSlots } from '@/data/mockData';
 import { supabase } from '@/integrations/supabase/client';
 import { 
   Calendar, 
   Clock, 
-  User, 
   CheckCircle2, 
   ArrowLeft, 
   ArrowRight,
@@ -26,7 +24,7 @@ import {
   Brain,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { format, addDays, startOfWeek } from 'date-fns';
+import { format, addDays, startOfWeek, getDay } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
 interface Service {
@@ -38,6 +36,30 @@ interface Service {
   stripe_price_id: string;
   stripe_product_id: string;
   duration_minutes: number;
+  is_active: boolean;
+}
+
+interface Professional {
+  id: string;
+  name: string;
+  email: string;
+  phone: string | null;
+  specialty_id: string;
+  crm: string | null;
+  bio: string | null;
+  avatar_url: string | null;
+  rating: number | null;
+  review_count: number | null;
+  is_active: boolean;
+}
+
+interface ProfessionalSchedule {
+  id: string;
+  professional_id: string;
+  day_of_week: number;
+  start_time: string;
+  end_time: string;
+  slot_duration_minutes: number;
   is_active: boolean;
 }
 
@@ -70,6 +92,8 @@ export default function BookingPage() {
   
   const [step, setStep] = useState<Step>('service');
   const [services, setServices] = useState<Service[]>([]);
+  const [professionals, setProfessionals] = useState<Professional[]>([]);
+  const [schedules, setSchedules] = useState<ProfessionalSchedule[]>([]);
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(false);
   
@@ -92,23 +116,38 @@ export default function BookingPage() {
     }
   }, [canceled]);
 
-  // Fetch services from database
+  // Fetch services and professionals from database
   useEffect(() => {
-    async function fetchServices() {
-      const { data, error } = await supabase
-        .from('services')
-        .select('*')
-        .eq('is_active', true);
+    async function fetchData() {
+      const [servicesRes, professionalsRes, schedulesRes] = await Promise.all([
+        supabase.from('services').select('*').eq('is_active', true),
+        supabase.from('professionals').select('*').eq('is_active', true),
+        supabase.from('professional_schedules').select('*').eq('is_active', true),
+      ]);
       
-      if (error) {
-        console.error('Error fetching services:', error);
+      if (servicesRes.error) {
+        console.error('Error fetching services:', servicesRes.error);
         toast.error('Erro ao carregar serviços');
       } else {
-        setServices(data || []);
+        setServices(servicesRes.data || []);
       }
+
+      if (professionalsRes.error) {
+        console.error('Error fetching professionals:', professionalsRes.error);
+        toast.error('Erro ao carregar profissionais');
+      } else {
+        setProfessionals(professionalsRes.data || []);
+      }
+
+      if (schedulesRes.error) {
+        console.error('Error fetching schedules:', schedulesRes.error);
+      } else {
+        setSchedules(schedulesRes.data || []);
+      }
+
       setLoading(false);
     }
-    fetchServices();
+    fetchData();
   }, []);
 
   const selectedService = useMemo(
@@ -118,20 +157,52 @@ export default function BookingPage() {
 
   const selectedProfessional = useMemo(
     () => professionals.find((p) => p.id === booking.professionalId),
-    [booking.professionalId]
+    [professionals, booking.professionalId]
   );
 
   const filteredProfessionals = useMemo(() => {
     if (!selectedService) return [];
     return professionals.filter((p) => 
-      p.specialtyId.toLowerCase() === selectedService.specialty_id.toLowerCase()
+      p.specialty_id.toLowerCase() === selectedService.specialty_id.toLowerCase()
     );
-  }, [selectedService]);
+  }, [selectedService, professionals]);
+
+  const professionalSchedules = useMemo(() => {
+    if (!booking.professionalId) return [];
+    return schedules.filter((s) => s.professional_id === booking.professionalId);
+  }, [schedules, booking.professionalId]);
 
   const weekDays = useMemo(() => {
     const start = addDays(startOfWeek(new Date(), { weekStartsOn: 1 }), weekOffset * 7);
     return Array.from({ length: 7 }, (_, i) => addDays(start, i));
   }, [weekOffset]);
+
+  // Generate time slots based on professional schedule
+  const timeSlots = useMemo(() => {
+    if (!booking.date || !booking.professionalId) return [];
+    
+    const selectedDate = new Date(booking.date);
+    const dayOfWeek = getDay(selectedDate);
+    const schedule = professionalSchedules.find((s) => s.day_of_week === dayOfWeek);
+    
+    if (!schedule) return [];
+
+    const slots: { id: string; time: string; available: boolean }[] = [];
+    const [startHour, startMin] = schedule.start_time.split(':').map(Number);
+    const [endHour, endMin] = schedule.end_time.split(':').map(Number);
+    const startMinutes = startHour * 60 + startMin;
+    const endMinutes = endHour * 60 + endMin;
+    const duration = schedule.slot_duration_minutes;
+
+    for (let m = startMinutes; m + duration <= endMinutes; m += duration) {
+      const hour = Math.floor(m / 60);
+      const min = m % 60;
+      const time = `${hour.toString().padStart(2, '0')}:${min.toString().padStart(2, '0')}`;
+      slots.push({ id: `slot-${time}`, time, available: true });
+    }
+
+    return slots;
+  }, [booking.date, booking.professionalId, professionalSchedules]);
 
   const handleSelectService = (id: string) => {
     setBooking((prev) => ({ ...prev, serviceId: id, professionalId: null }));
@@ -311,7 +382,7 @@ export default function BookingPage() {
                       className="text-left bg-background border border-clinic-border-subtle rounded-xl p-5 hover:border-clinic-primary hover:shadow-clinic-md transition-all flex gap-4"
                     >
                       <img
-                        src={professional.avatar}
+                        src={professional.avatar_url || '/placeholder.svg'}
                         alt={professional.name}
                         className="h-16 w-16 rounded-xl object-cover shrink-0"
                       />
@@ -320,20 +391,10 @@ export default function BookingPage() {
                         <p className="text-sm text-clinic-text-muted">{professional.crm}</p>
                         <div className="flex items-center gap-1 mt-1">
                           <Star className="h-4 w-4 fill-warning text-warning" />
-                          <span className="text-sm font-medium">{professional.rating}</span>
+                          <span className="text-sm font-medium">{professional.rating || 5.0}</span>
                           <span className="text-sm text-clinic-text-muted">
-                            ({professional.reviewCount})
+                            ({professional.review_count || 0})
                           </span>
-                        </div>
-                        <div className="mt-2 flex flex-wrap gap-1">
-                          {professional.availableDays.slice(0, 3).map((day) => (
-                            <span
-                              key={day}
-                              className="text-xs px-2 py-0.5 rounded bg-clinic-surface text-clinic-text-muted"
-                            >
-                              {day.slice(0, 3)}
-                            </span>
-                          ))}
                         </div>
                       </div>
                     </button>
@@ -386,9 +447,9 @@ export default function BookingPage() {
                       {weekDays.map((date) => {
                         const isSelected = booking.date === format(date, 'yyyy-MM-dd');
                         const isPast = date < new Date();
-                        const dayName = format(date, 'EEEE', { locale: ptBR });
-                        const isAvailable = selectedProfessional?.availableDays.some(
-                          (d) => d.toLowerCase() === dayName.toLowerCase()
+                        const dayOfWeek = getDay(date);
+                        const isAvailable = professionalSchedules.some(
+                          (s) => s.day_of_week === dayOfWeek
                         );
 
                         return (
@@ -424,24 +485,31 @@ export default function BookingPage() {
                           {format(new Date(booking.date), "EEEE, dd 'de' MMMM", { locale: ptBR })}
                         </p>
 
-                        <div className="grid grid-cols-3 gap-2">
-                          {timeSlots.map((slot) => (
-                            <button
-                              key={slot.id}
-                              onClick={() => slot.available && handleSelectTime(slot.time)}
-                              disabled={!slot.available}
-                              className={`py-3 px-4 rounded-lg text-sm font-medium transition-all ${
-                                booking.time === slot.time
-                                  ? 'bg-clinic-primary text-foreground'
-                                  : slot.available
-                                  ? 'bg-clinic-surface hover:bg-clinic-primary/10 hover:text-clinic-primary'
-                                  : 'bg-clinic-surface/50 text-clinic-text-muted cursor-not-allowed line-through'
-                              }`}
-                            >
-                              {slot.time}
-                            </button>
-                          ))}
-                        </div>
+                        {timeSlots.length > 0 ? (
+                          <div className="grid grid-cols-3 gap-2">
+                            {timeSlots.map((slot) => (
+                              <button
+                                key={slot.id}
+                                onClick={() => slot.available && handleSelectTime(slot.time)}
+                                disabled={!slot.available}
+                                className={`py-3 px-4 rounded-lg text-sm font-medium transition-all ${
+                                  booking.time === slot.time
+                                    ? 'bg-clinic-primary text-foreground'
+                                    : slot.available
+                                    ? 'bg-clinic-surface hover:bg-clinic-primary/10 hover:text-clinic-primary'
+                                    : 'bg-clinic-surface/50 text-clinic-text-muted cursor-not-allowed line-through'
+                                }`}
+                              >
+                                {slot.time}
+                              </button>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="text-center py-8 text-clinic-text-muted">
+                            <Clock className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                            <p className="text-sm">Nenhum horário disponível para este dia</p>
+                          </div>
+                        )}
                       </div>
                     ) : (
                       <div className="flex flex-col items-center justify-center py-12 text-clinic-text-muted">
@@ -483,7 +551,7 @@ export default function BookingPage() {
                     <div className="space-y-4">
                       <div className="flex items-start gap-4">
                         <img
-                          src={selectedProfessional?.avatar}
+                          src={selectedProfessional?.avatar_url || '/placeholder.svg'}
                           alt={selectedProfessional?.name}
                           className="h-14 w-14 rounded-xl object-cover"
                         />
@@ -494,7 +562,7 @@ export default function BookingPage() {
                           </p>
                           <div className="flex items-center gap-1 mt-1">
                             <Star className="h-3.5 w-3.5 fill-warning text-warning" />
-                            <span className="text-sm">{selectedProfessional?.rating}</span>
+                            <span className="text-sm">{selectedProfessional?.rating || 5.0}</span>
                           </div>
                         </div>
                       </div>

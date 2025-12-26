@@ -14,6 +14,8 @@ import AdminPatients from "./pages/admin/AdminPatients";
 import AdminServices from "./pages/admin/AdminServices";
 import AdminReports from "./pages/admin/AdminReports";
 import AdminSettings from "./pages/admin/AdminSettings";
+import AdminProfessionals from "./pages/admin/AdminProfessionals";
+import ProfessionalDashboard from "./pages/admin/ProfessionalDashboard";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -37,6 +39,8 @@ const App = () => (
           <Route path="/admin/agenda" element={<AdminAgenda />} />
           <Route path="/admin/pacientes" element={<AdminPatients />} />
           <Route path="/admin/servicos" element={<AdminServices />} />
+          <Route path="/admin/profissionais" element={<AdminProfessionals />} />
+          <Route path="/admin/profissionais/:id" element={<ProfessionalDashboard />} />
           <Route path="/admin/relatorios" element={<AdminReports />} />
           <Route path="/admin/configuracoes" element={<AdminSettings />} />
           
