@@ -24,7 +24,7 @@ import {
   Brain,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { format, addDays, startOfWeek, getDay } from 'date-fns';
+import { format, addDays, startOfWeek, getDay, startOfDay, isToday } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
 interface Service {
@@ -223,12 +223,21 @@ export default function BookingPage() {
       )
       .map((apt) => apt.appointment_time.slice(0, 5)); // Get HH:MM format
 
+    // Check if selected date is today to filter past time slots
+    const isTodayDate = isToday(selectedDate);
+    const now = new Date();
+    const currentMinutes = now.getHours() * 60 + now.getMinutes();
+    // Add 30 min buffer for same-day bookings
+    const minAllowedMinutes = currentMinutes + 30;
+
     for (let m = startMinutes; m + duration <= endMinutes; m += duration) {
       const hour = Math.floor(m / 60);
       const min = m % 60;
       const time = `${hour.toString().padStart(2, '0')}:${min.toString().padStart(2, '0')}`;
       const isBooked = bookedTimes.includes(time);
-      slots.push({ id: `slot-${time}`, time, available: !isBooked });
+      // If today, also check if the slot time has already passed
+      const isPastSlot = isTodayDate && m < minAllowedMinutes;
+      slots.push({ id: `slot-${time}`, time, available: !isBooked && !isPastSlot });
     }
 
     return slots;
@@ -476,7 +485,8 @@ export default function BookingPage() {
                       ))}
                       {weekDays.map((date) => {
                         const isSelected = booking.date === format(date, 'yyyy-MM-dd');
-                        const isPast = date < new Date();
+                        // Compare by day only (not timestamp) - day is past only if before start of today
+                        const isPast = startOfDay(date) < startOfDay(new Date());
                         const dayOfWeek = getDay(date);
                         const isAvailable = professionalSchedules.some(
                           (s) => s.day_of_week === dayOfWeek
