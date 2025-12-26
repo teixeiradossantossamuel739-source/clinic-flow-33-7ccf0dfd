@@ -3,12 +3,16 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { AuthProvider } from "@/contexts/AuthContext";
+import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import HomePage from "./pages/HomePage";
 import SpecialtiesPage from "./pages/SpecialtiesPage";
 import ProfessionalsPage from "./pages/ProfessionalsPage";
 import BookingPage from "./pages/BookingPage";
 import BookingSuccessPage from "./pages/BookingSuccessPage";
 import MinhasConsultas from "./pages/MinhasConsultas";
+import AuthPage from "./pages/AuthPage";
+import SetupPage from "./pages/SetupPage";
 import AdminDashboard from "./pages/admin/AdminDashboard";
 import AdminAgenda from "./pages/admin/AdminAgenda";
 import AdminPatients from "./pages/admin/AdminPatients";
@@ -27,27 +31,87 @@ const App = () => (
       <Toaster />
       <Sonner />
       <BrowserRouter>
-        <Routes>
-          {/* Public Routes */}
-          <Route path="/" element={<HomePage />} />
-          <Route path="/especialidades" element={<SpecialtiesPage />} />
-          <Route path="/profissionais" element={<ProfessionalsPage />} />
-          <Route path="/agendar" element={<BookingPage />} />
-          <Route path="/agendamento-sucesso" element={<BookingSuccessPage />} />
-          <Route path="/minhas-consultas" element={<MinhasConsultas />} />
-          
-          {/* Admin Routes */}
-          <Route path="/admin" element={<AdminDashboard />} />
-          <Route path="/admin/agenda" element={<AdminAgenda />} />
-          <Route path="/admin/pacientes" element={<AdminPatients />} />
-          <Route path="/admin/servicos" element={<AdminServices />} />
-          <Route path="/admin/profissionais" element={<AdminProfessionals />} />
-          <Route path="/admin/profissionais/:id" element={<ProfessionalDashboard />} />
-          <Route path="/admin/relatorios" element={<AdminReports />} />
-          <Route path="/admin/configuracoes" element={<AdminSettings />} />
-          
-          <Route path="*" element={<NotFound />} />
-        </Routes>
+        <AuthProvider>
+          <Routes>
+            {/* Public Routes */}
+            <Route path="/" element={<HomePage />} />
+            <Route path="/auth" element={<AuthPage />} />
+            <Route path="/setup" element={<SetupPage />} />
+            <Route path="/especialidades" element={<SpecialtiesPage />} />
+            <Route path="/profissionais" element={<ProfessionalsPage />} />
+            <Route path="/agendar" element={<BookingPage />} />
+            <Route path="/agendamento-sucesso" element={<BookingSuccessPage />} />
+            <Route path="/minhas-consultas" element={<MinhasConsultas />} />
+            
+            {/* Admin Routes - Admin only */}
+            <Route
+              path="/admin"
+              element={
+                <ProtectedRoute allowedRoles={['admin', 'funcionario']}>
+                  <AdminDashboard />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/agenda"
+              element={
+                <ProtectedRoute allowedRoles={['admin', 'funcionario']}>
+                  <AdminAgenda />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/pacientes"
+              element={
+                <ProtectedRoute allowedRoles={['admin', 'funcionario']}>
+                  <AdminPatients />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/servicos"
+              element={
+                <ProtectedRoute allowedRoles={['admin']}>
+                  <AdminServices />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/profissionais"
+              element={
+                <ProtectedRoute allowedRoles={['admin']}>
+                  <AdminProfessionals />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/profissionais/:id"
+              element={
+                <ProtectedRoute allowedRoles={['admin', 'funcionario']}>
+                  <ProfessionalDashboard />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/relatorios"
+              element={
+                <ProtectedRoute allowedRoles={['admin']}>
+                  <AdminReports />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/configuracoes"
+              element={
+                <ProtectedRoute allowedRoles={['admin']}>
+                  <AdminSettings />
+                </ProtectedRoute>
+              }
+            />
+            
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </AuthProvider>
       </BrowserRouter>
     </TooltipProvider>
   </QueryClientProvider>
