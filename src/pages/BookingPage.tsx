@@ -86,6 +86,15 @@ interface BookingData {
   patientEmail: string;
 }
 
+interface ExistingAppointment {
+  id: string;
+  professional_id: string;
+  professional_uuid: string | null;
+  appointment_date: string;
+  appointment_time: string;
+  status: string;
+}
+
 export default function BookingPage() {
   const [searchParams] = useSearchParams();
   const canceled = searchParams.get('canceled');
@@ -94,6 +103,7 @@ export default function BookingPage() {
   const [services, setServices] = useState<Service[]>([]);
   const [professionals, setProfessionals] = useState<Professional[]>([]);
   const [schedules, setSchedules] = useState<ProfessionalSchedule[]>([]);
+  const [existingAppointments, setExistingAppointments] = useState<ExistingAppointment[]>([]);
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(false);
   
@@ -116,13 +126,17 @@ export default function BookingPage() {
     }
   }, [canceled]);
 
-  // Fetch services and professionals from database
+  // Fetch services, professionals, schedules and existing appointments
   useEffect(() => {
     async function fetchData() {
-      const [servicesRes, professionalsRes, schedulesRes] = await Promise.all([
+      const [servicesRes, professionalsRes, schedulesRes, appointmentsRes] = await Promise.all([
         supabase.from('services').select('*').eq('is_active', true),
         supabase.from('professionals').select('*').eq('is_active', true),
         supabase.from('professional_schedules').select('*').eq('is_active', true),
+        supabase
+          .from('appointments')
+          .select('id, professional_id, professional_uuid, appointment_date, appointment_time, status')
+          .not('status', 'eq', 'cancelled'),
       ]);
       
       if (servicesRes.error) {
@@ -143,6 +157,12 @@ export default function BookingPage() {
         console.error('Error fetching schedules:', schedulesRes.error);
       } else {
         setSchedules(schedulesRes.data || []);
+      }
+
+      if (appointmentsRes.error) {
+        console.error('Error fetching existing appointments:', appointmentsRes.error);
+      } else {
+        setExistingAppointments(appointmentsRes.data || []);
       }
 
       setLoading(false);
@@ -177,7 +197,7 @@ export default function BookingPage() {
     return Array.from({ length: 7 }, (_, i) => addDays(start, i));
   }, [weekOffset]);
 
-  // Generate time slots based on professional schedule
+  // Generate time slots based on professional schedule and check for existing appointments
   const timeSlots = useMemo(() => {
     if (!booking.date || !booking.professionalId) return [];
     
@@ -194,15 +214,25 @@ export default function BookingPage() {
     const endMinutes = endHour * 60 + endMin;
     const duration = schedule.slot_duration_minutes;
 
+    // Get booked times for this professional on this date
+    const bookedTimes = existingAppointments
+      .filter(
+        (apt) =>
+          (apt.professional_id === booking.professionalId || apt.professional_uuid === booking.professionalId) &&
+          apt.appointment_date === booking.date
+      )
+      .map((apt) => apt.appointment_time.slice(0, 5)); // Get HH:MM format
+
     for (let m = startMinutes; m + duration <= endMinutes; m += duration) {
       const hour = Math.floor(m / 60);
       const min = m % 60;
       const time = `${hour.toString().padStart(2, '0')}:${min.toString().padStart(2, '0')}`;
-      slots.push({ id: `slot-${time}`, time, available: true });
+      const isBooked = bookedTimes.includes(time);
+      slots.push({ id: `slot-${time}`, time, available: !isBooked });
     }
 
     return slots;
-  }, [booking.date, booking.professionalId, professionalSchedules]);
+  }, [booking.date, booking.professionalId, professionalSchedules, existingAppointments]);
 
   const handleSelectService = (id: string) => {
     setBooking((prev) => ({ ...prev, serviceId: id, professionalId: null }));

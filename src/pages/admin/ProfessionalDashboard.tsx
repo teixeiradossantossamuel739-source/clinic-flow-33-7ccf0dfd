@@ -14,6 +14,8 @@ import {
   XCircle,
   Loader2,
   Star,
+  AlertCircle,
+  RefreshCw,
 } from 'lucide-react';
 import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -26,6 +28,7 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from 'recharts';
+import { toast } from 'sonner';
 
 interface Professional {
   id: string;
@@ -57,33 +60,104 @@ export default function ProfessionalDashboard() {
   const [professional, setProfessional] = useState<Professional | null>(null);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [loading, setLoading] = useState(true);
+  const [processing, setProcessing] = useState<string | null>(null);
 
-  useEffect(() => {
-    async function fetchData() {
-      if (!id) return;
+  const fetchData = async () => {
+    if (!id) return;
 
-      const [profRes, apptRes] = await Promise.all([
-        supabase.from('professionals').select('*').eq('id', id).maybeSingle(),
-        supabase
-          .from('appointments')
-          .select('*')
-          .eq('professional_uuid', id)
-          .order('appointment_date', { ascending: false }),
-      ]);
+    const [profRes, apptRes] = await Promise.all([
+      supabase.from('professionals').select('*').eq('id', id).maybeSingle(),
+      supabase
+        .from('appointments')
+        .select('*')
+        .eq('professional_uuid', id)
+        .order('appointment_date', { ascending: false }),
+    ]);
 
-      if (profRes.data) {
-        setProfessional(profRes.data);
-      }
-
-      if (apptRes.data) {
-        setAppointments(apptRes.data);
-      }
-
-      setLoading(false);
+    if (profRes.data) {
+      setProfessional(profRes.data);
     }
 
+    if (apptRes.data) {
+      setAppointments(apptRes.data);
+    }
+
+    setLoading(false);
+  };
+
+  useEffect(() => {
     fetchData();
   }, [id]);
+
+  const handleConfirmAppointment = async (appointmentId: string) => {
+    setProcessing(appointmentId);
+    
+    const { error } = await supabase
+      .from('appointments')
+      .update({ status: 'confirmed' })
+      .eq('id', appointmentId);
+
+    if (error) {
+      toast.error('Erro ao confirmar consulta');
+      console.error(error);
+    } else {
+      toast.success('Consulta confirmada!');
+      setAppointments((prev) =>
+        prev.map((a) => (a.id === appointmentId ? { ...a, status: 'confirmed' } : a))
+      );
+    }
+    setProcessing(null);
+  };
+
+  const handleRefuseAppointment = async (appointmentId: string) => {
+    setProcessing(appointmentId);
+    
+    const { error } = await supabase
+      .from('appointments')
+      .update({ status: 'cancelled' })
+      .eq('id', appointmentId);
+
+    if (error) {
+      toast.error('Erro ao recusar consulta');
+      console.error(error);
+    } else {
+      toast.success('Consulta recusada');
+      setAppointments((prev) =>
+        prev.map((a) => (a.id === appointmentId ? { ...a, status: 'cancelled' } : a))
+      );
+    }
+    setProcessing(null);
+  };
+
+  const handleMarkComplete = async (appointmentId: string) => {
+    setProcessing(appointmentId);
+    
+    const { error } = await supabase
+      .from('appointments')
+      .update({ status: 'completed' })
+      .eq('id', appointmentId);
+
+    if (error) {
+      toast.error('Erro ao marcar como concluída');
+      console.error(error);
+    } else {
+      toast.success('Consulta marcada como concluída');
+      setAppointments((prev) =>
+        prev.map((a) => (a.id === appointmentId ? { ...a, status: 'completed' } : a))
+      );
+    }
+    setProcessing(null);
+  };
+
+  // Pending appointments that need confirmation
+  const pendingAppointments = useMemo(() => {
+    return appointments.filter(
+      (a) =>
+        (a.status === 'pending' || a.status === 'rescheduled') &&
+        a.payment_status === 'paid' &&
+        new Date(`${a.appointment_date}T${a.appointment_time}`) >= new Date()
+    );
+  }, [appointments]);
 
   const stats = useMemo(() => {
     const now = new Date();
@@ -247,6 +321,73 @@ export default function ProfessionalDashboard() {
           </div>
         </div>
 
+        {/* Pending Confirmation */}
+        {pendingAppointments.length > 0 && (
+          <div className="bg-warning/5 border border-warning/20 rounded-2xl p-6">
+            <div className="flex items-center gap-2 mb-4">
+              <AlertCircle className="h-5 w-5 text-warning" />
+              <h3 className="font-semibold">Aguardando Confirmação ({pendingAppointments.length})</h3>
+            </div>
+            <div className="space-y-3">
+              {pendingAppointments.map((apt) => (
+                <div
+                  key={apt.id}
+                  className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 rounded-xl bg-background"
+                >
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2 mb-1">
+                      <Calendar className="h-4 w-4 text-clinic-primary" />
+                      <span className="font-medium">
+                        {format(new Date(apt.appointment_date), "EEEE, dd 'de' MMMM", { locale: ptBR })}
+                      </span>
+                      <span className="text-clinic-text-muted">às {apt.appointment_time}</span>
+                    </div>
+                    <p className="text-sm text-clinic-text-secondary">
+                      Paciente: <span className="font-medium">{apt.patient_name}</span>
+                    </p>
+                    <p className="text-sm text-clinic-text-muted">{apt.patient_email}</p>
+                    {apt.status === 'rescheduled' && (
+                      <span className="inline-flex items-center gap-1 mt-1 text-xs text-clinic-primary">
+                        <RefreshCw className="h-3 w-3" />
+                        Solicitação de reagendamento
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleRefuseAppointment(apt.id)}
+                      disabled={processing === apt.id}
+                      className="text-destructive hover:text-destructive"
+                    >
+                      {processing === apt.id ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <XCircle className="h-4 w-4 mr-1" />
+                      )}
+                      Recusar
+                    </Button>
+                    <Button
+                      variant="clinic"
+                      size="sm"
+                      onClick={() => handleConfirmAppointment(apt.id)}
+                      disabled={processing === apt.id}
+                    >
+                      {processing === apt.id ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <CheckCircle2 className="h-4 w-4 mr-1" />
+                      )}
+                      Confirmar
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Chart + Upcoming */}
         <div className="grid lg:grid-cols-2 gap-6">
           {/* Chart */}
@@ -271,35 +412,50 @@ export default function ProfessionalDashboard() {
             </div>
           </div>
 
-          {/* Upcoming Appointments */}
+          {/* Upcoming Appointments (Confirmed only) */}
           <div className="bg-background rounded-2xl p-6 shadow-clinic-sm">
-            <h3 className="font-semibold mb-4">Próximas Consultas</h3>
+            <h3 className="font-semibold mb-4">Próximas Consultas Confirmadas</h3>
             {stats.upcomingAppointments.length > 0 ? (
               <div className="space-y-3">
-                {stats.upcomingAppointments.map((apt) => (
-                  <div
-                    key={apt.id}
-                    className="flex items-center gap-4 p-3 rounded-lg bg-clinic-surface"
-                  >
-                    <div className="text-center min-w-[50px]">
-                      <p className="text-sm font-semibold">{apt.appointment_time}</p>
-                      <p className="text-xs text-clinic-text-muted">
-                        {format(new Date(apt.appointment_date), 'dd/MM')}
-                      </p>
+                {stats.upcomingAppointments
+                  .filter((a) => a.status === 'confirmed')
+                  .slice(0, 5)
+                  .map((apt) => (
+                    <div
+                      key={apt.id}
+                      className="flex items-center gap-4 p-3 rounded-lg bg-clinic-surface"
+                    >
+                      <div className="text-center min-w-[50px]">
+                        <p className="text-sm font-semibold">{apt.appointment_time}</p>
+                        <p className="text-xs text-clinic-text-muted">
+                          {format(new Date(apt.appointment_date), 'dd/MM')}
+                        </p>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium truncate">{apt.patient_name}</p>
+                        <p className="text-sm text-clinic-text-muted truncate">{apt.patient_email}</p>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleMarkComplete(apt.id)}
+                        disabled={processing === apt.id}
+                        className="text-success hover:text-success"
+                      >
+                        {processing === apt.id ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <CheckCircle2 className="h-4 w-4" />
+                        )}
+                      </Button>
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="font-medium truncate">{apt.patient_name}</p>
-                      <p className="text-sm text-clinic-text-muted truncate">{apt.patient_email}</p>
-                    </div>
-                    <div className="flex items-center gap-1 text-xs">
-                      {apt.payment_status === 'paid' ? (
-                        <CheckCircle2 className="h-4 w-4 text-success" />
-                      ) : (
-                        <XCircle className="h-4 w-4 text-warning" />
-                      )}
-                    </div>
+                  ))}
+                {stats.upcomingAppointments.filter((a) => a.status === 'confirmed').length === 0 && (
+                  <div className="text-center py-8 text-clinic-text-muted">
+                    <Calendar className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                    <p className="text-sm">Nenhuma consulta confirmada</p>
                   </div>
-                ))}
+                )}
               </div>
             ) : (
               <div className="text-center py-8 text-clinic-text-muted">
