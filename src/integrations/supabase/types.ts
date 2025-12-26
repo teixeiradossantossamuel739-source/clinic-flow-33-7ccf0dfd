@@ -14,7 +14,116 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      appointments: {
+        Row: {
+          amount_cents: number
+          appointment_date: string
+          appointment_time: string
+          created_at: string
+          id: string
+          notes: string | null
+          patient_email: string
+          patient_name: string
+          patient_phone: string
+          payment_status: string
+          professional_id: string
+          service_id: string | null
+          status: string
+          stripe_payment_intent_id: string | null
+          stripe_session_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          amount_cents: number
+          appointment_date: string
+          appointment_time: string
+          created_at?: string
+          id?: string
+          notes?: string | null
+          patient_email: string
+          patient_name: string
+          patient_phone: string
+          payment_status?: string
+          professional_id: string
+          service_id?: string | null
+          status?: string
+          stripe_payment_intent_id?: string | null
+          stripe_session_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          amount_cents?: number
+          appointment_date?: string
+          appointment_time?: string
+          created_at?: string
+          id?: string
+          notes?: string | null
+          patient_email?: string
+          patient_name?: string
+          patient_phone?: string
+          payment_status?: string
+          professional_id?: string
+          service_id?: string | null
+          status?: string
+          stripe_payment_intent_id?: string | null
+          stripe_session_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "appointments_service_id_fkey"
+            columns: ["service_id"]
+            isOneToOne: false
+            referencedRelation: "services"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      services: {
+        Row: {
+          created_at: string
+          description: string | null
+          duration_minutes: number
+          id: string
+          is_active: boolean
+          name: string
+          price_cents: number
+          professional_id: string | null
+          specialty_id: string
+          stripe_price_id: string
+          stripe_product_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          duration_minutes?: number
+          id?: string
+          is_active?: boolean
+          name: string
+          price_cents: number
+          professional_id?: string | null
+          specialty_id: string
+          stripe_price_id: string
+          stripe_product_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          duration_minutes?: number
+          id?: string
+          is_active?: boolean
+          name?: string
+          price_cents?: number
+          professional_id?: string | null
+          specialty_id?: string
+          stripe_price_id?: string
+          stripe_product_id?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
