@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
-import { Loader2, CheckCircle2, XCircle, Users, Shield, Briefcase } from 'lucide-react';
+import { Loader2, CheckCircle2, XCircle, Users, Shield, Briefcase, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface TestUser {
@@ -12,6 +12,8 @@ interface TestUser {
   description: string;
   icon: React.ReactNode;
 }
+
+type UserStatus = 'idle' | 'loading' | 'created' | 'updated' | 'exists' | 'error';
 
 const testUsers: TestUser[] = [
   {
@@ -34,44 +36,48 @@ const testUsers: TestUser[] = [
 
 export default function SetupPage() {
   const [loading, setLoading] = useState<string | null>(null);
-  const [created, setCreated] = useState<Record<string, boolean>>({});
+  const [status, setStatus] = useState<Record<string, UserStatus>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
 
-  const createUser = async (user: TestUser) => {
+  const createOrUpdateUser = async (user: TestUser) => {
     setLoading(user.email);
+    setStatus((prev) => ({ ...prev, [user.email]: 'loading' }));
     setErrors((prev) => ({ ...prev, [user.email]: '' }));
 
     try {
-      // Try to sign up the user
-      const { error } = await supabase.auth.signUp({
-        email: user.email,
-        password: user.password,
-        options: {
-          emailRedirectTo: `${window.location.origin}/`,
-          data: {
-            full_name: user.fullName,
-            role: user.role,
-          },
+      // Call the edge function to create/update user
+      const { data, error } = await supabase.functions.invoke('create-test-user', {
+        body: {
+          email: user.email,
+          password: user.password,
+          fullName: user.fullName,
+          role: user.role,
         },
       });
 
       if (error) {
-        if (error.message.includes('already registered')) {
-          setCreated((prev) => ({ ...prev, [user.email]: true }));
-          toast.info(`${user.email} já existe`);
+        setStatus((prev) => ({ ...prev, [user.email]: 'error' }));
+        setErrors((prev) => ({ ...prev, [user.email]: error.message }));
+        toast.error(`Erro ao criar ${user.email}`);
+        return;
+      }
+
+      if (data?.message?.includes('already exists')) {
+        if (data?.updated) {
+          setStatus((prev) => ({ ...prev, [user.email]: 'updated' }));
+          toast.success(`${user.email} atualizado!`);
         } else {
-          setErrors((prev) => ({ ...prev, [user.email]: error.message }));
-          toast.error(`Erro ao criar ${user.email}`);
+          setStatus((prev) => ({ ...prev, [user.email]: 'exists' }));
+          toast.info(`${user.email} já existe e está correto`);
         }
       } else {
-        setCreated((prev) => ({ ...prev, [user.email]: true }));
+        setStatus((prev) => ({ ...prev, [user.email]: 'created' }));
         toast.success(`${user.email} criado com sucesso!`);
-        
-        // Sign out so we don't stay logged in as this user
-        await supabase.auth.signOut();
       }
     } catch (err) {
+      setStatus((prev) => ({ ...prev, [user.email]: 'error' }));
       setErrors((prev) => ({ ...prev, [user.email]: 'Erro inesperado' }));
+      toast.error(`Erro ao criar ${user.email}`);
     } finally {
       setLoading(null);
     }
@@ -79,13 +85,32 @@ export default function SetupPage() {
 
   const createAllUsers = async () => {
     for (const user of testUsers) {
-      if (!created[user.email]) {
-        await createUser(user);
-        // Small delay between creations
-        await new Promise((resolve) => setTimeout(resolve, 500));
-      }
+      await createOrUpdateUser(user);
+      // Small delay between creations
+      await new Promise((resolve) => setTimeout(resolve, 500));
     }
   };
+
+  const getStatusIcon = (email: string) => {
+    const s = status[email];
+    if (s === 'created' || s === 'updated' || s === 'exists') {
+      return <CheckCircle2 className="h-5 w-5 text-success" />;
+    }
+    if (s === 'error') {
+      return <XCircle className="h-5 w-5 text-destructive" />;
+    }
+    return null;
+  };
+
+  const getStatusText = (email: string) => {
+    const s = status[email];
+    if (s === 'created') return 'Criado';
+    if (s === 'updated') return 'Atualizado';
+    if (s === 'exists') return 'OK';
+    return null;
+  };
+
+  const allDone = testUsers.every((u) => ['created', 'updated', 'exists'].includes(status[u.email] || ''));
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-clinic-surface p-4">
@@ -134,19 +159,24 @@ export default function SetupPage() {
                   )}
                 </div>
                 <div className="flex items-center gap-2">
-                  {created[user.email] ? (
-                    <CheckCircle2 className="h-5 w-5 text-success" />
-                  ) : errors[user.email] ? (
-                    <XCircle className="h-5 w-5 text-destructive" />
-                  ) : (
+                  {getStatusIcon(user.email)}
+                  {getStatusText(user.email) && (
+                    <span className="text-xs text-success">{getStatusText(user.email)}</span>
+                  )}
+                  {!['created', 'updated', 'exists'].includes(status[user.email] || '') && (
                     <Button
                       size="sm"
                       variant="outline"
-                      onClick={() => createUser(user)}
+                      onClick={() => createOrUpdateUser(user)}
                       disabled={loading !== null}
                     >
                       {loading === user.email ? (
                         <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : status[user.email] === 'error' ? (
+                        <>
+                          <RefreshCw className="h-4 w-4 mr-1" />
+                          Tentar novamente
+                        </>
                       ) : (
                         'Criar'
                       )}
@@ -161,11 +191,11 @@ export default function SetupPage() {
             <Button
               variant="clinic"
               onClick={createAllUsers}
-              disabled={loading !== null || testUsers.every((u) => created[u.email])}
+              disabled={loading !== null || allDone}
               className="flex-1"
             >
               {loading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-              Criar Todos os Usuários
+              {allDone ? 'Todos os usuários criados' : 'Criar Todos os Usuários'}
             </Button>
             <a href="/auth" className="flex-1">
               <Button variant="outline" className="w-full">

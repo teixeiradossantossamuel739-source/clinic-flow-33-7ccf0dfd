@@ -22,7 +22,7 @@ interface AuthContextType {
   loading: boolean;
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
   signInWithOtp: (email: string, fullName?: string, whatsapp?: string) => Promise<{ error: Error | null }>;
-  signUp: (email: string, password: string, fullName: string, role?: AppRole) => Promise<{ error: Error | null }>;
+  signUp: (email: string, password: string, fullName: string) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
   isAdmin: boolean;
   isFuncionario: boolean;
@@ -117,14 +117,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         data: {
           full_name: fullName,
           whatsapp: whatsapp,
-          role: 'cliente',
+          // Role is NOT sent here - trigger always creates as 'cliente'
         },
       },
     });
     return { error };
   };
 
-  const signUp = async (email: string, password: string, fullName: string, role?: AppRole) => {
+  const signUp = async (email: string, password: string, fullName: string) => {
     const redirectUrl = `${window.location.origin}/`;
     
     const { error } = await supabase.auth.signUp({
@@ -134,7 +134,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         emailRedirectTo: redirectUrl,
         data: {
           full_name: fullName,
-          role: role || 'cliente',
+          // Role is NOT sent here - trigger always creates as 'cliente'
+          // Admin/funcionario roles must be set via backend only
         },
       },
     });
