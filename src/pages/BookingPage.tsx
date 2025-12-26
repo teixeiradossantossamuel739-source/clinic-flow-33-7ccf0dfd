@@ -1,10 +1,11 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { PublicLayout } from '@/components/layout/PublicLayout';
-import { specialties, professionals, timeSlots } from '@/data/mockData';
+import { professionals, timeSlots } from '@/data/mockData';
+import { supabase } from '@/integrations/supabase/client';
 import { 
   Calendar, 
   Clock, 
@@ -13,7 +14,8 @@ import {
   ArrowLeft, 
   ArrowRight,
   Star,
-  Phone,
+  CreditCard,
+  Loader2,
   Stethoscope,
   Heart,
   Sparkles,
@@ -27,6 +29,18 @@ import { toast } from 'sonner';
 import { format, addDays, startOfWeek } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
+interface Service {
+  id: string;
+  name: string;
+  description: string | null;
+  specialty_id: string;
+  price_cents: number;
+  stripe_price_id: string;
+  stripe_product_id: string;
+  duration_minutes: number;
+  is_active: boolean;
+}
+
 const iconMap: Record<string, React.ReactNode> = {
   Stethoscope: <Stethoscope className="h-5 w-5" />,
   Heart: <Heart className="h-5 w-5" />,
@@ -38,10 +52,10 @@ const iconMap: Record<string, React.ReactNode> = {
   Brain: <Brain className="h-5 w-5" />,
 };
 
-type Step = 'specialty' | 'professional' | 'datetime' | 'confirm';
+type Step = 'service' | 'professional' | 'datetime' | 'confirm';
 
 interface BookingData {
-  specialtyId: string | null;
+  serviceId: string | null;
   professionalId: string | null;
   date: string | null;
   time: string | null;
@@ -52,16 +66,16 @@ interface BookingData {
 
 export default function BookingPage() {
   const [searchParams] = useSearchParams();
-  const initialSpecialty = searchParams.get('especialidade');
-  const initialProfessional = searchParams.get('profissional');
-
-  const [step, setStep] = useState<Step>(
-    initialProfessional ? 'datetime' : initialSpecialty ? 'professional' : 'specialty'
-  );
+  const canceled = searchParams.get('canceled');
+  
+  const [step, setStep] = useState<Step>('service');
+  const [services, setServices] = useState<Service[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [processing, setProcessing] = useState(false);
   
   const [booking, setBooking] = useState<BookingData>({
-    specialtyId: initialSpecialty,
-    professionalId: initialProfessional,
+    serviceId: null,
+    professionalId: null,
     date: null,
     time: null,
     patientName: '',
@@ -71,9 +85,35 @@ export default function BookingPage() {
 
   const [weekOffset, setWeekOffset] = useState(0);
 
-  const selectedSpecialty = useMemo(
-    () => specialties.find((s) => s.id === booking.specialtyId),
-    [booking.specialtyId]
+  // Show canceled toast
+  useEffect(() => {
+    if (canceled) {
+      toast.error('Pagamento cancelado. Tente novamente.');
+    }
+  }, [canceled]);
+
+  // Fetch services from database
+  useEffect(() => {
+    async function fetchServices() {
+      const { data, error } = await supabase
+        .from('services')
+        .select('*')
+        .eq('is_active', true);
+      
+      if (error) {
+        console.error('Error fetching services:', error);
+        toast.error('Erro ao carregar serviços');
+      } else {
+        setServices(data || []);
+      }
+      setLoading(false);
+    }
+    fetchServices();
+  }, []);
+
+  const selectedService = useMemo(
+    () => services.find((s) => s.id === booking.serviceId),
+    [services, booking.serviceId]
   );
 
   const selectedProfessional = useMemo(
@@ -81,18 +121,20 @@ export default function BookingPage() {
     [booking.professionalId]
   );
 
-  const filteredProfessionals = useMemo(
-    () => professionals.filter((p) => p.specialtyId === booking.specialtyId),
-    [booking.specialtyId]
-  );
+  const filteredProfessionals = useMemo(() => {
+    if (!selectedService) return [];
+    return professionals.filter((p) => 
+      p.specialtyId.toLowerCase() === selectedService.specialty_id.toLowerCase()
+    );
+  }, [selectedService]);
 
   const weekDays = useMemo(() => {
     const start = addDays(startOfWeek(new Date(), { weekStartsOn: 1 }), weekOffset * 7);
     return Array.from({ length: 7 }, (_, i) => addDays(start, i));
   }, [weekOffset]);
 
-  const handleSelectSpecialty = (id: string) => {
-    setBooking((prev) => ({ ...prev, specialtyId: id, professionalId: null }));
+  const handleSelectService = (id: string) => {
+    setBooking((prev) => ({ ...prev, serviceId: id, professionalId: null }));
     setStep('professional');
   };
 
@@ -109,35 +151,66 @@ export default function BookingPage() {
     setBooking((prev) => ({ ...prev, time }));
   };
 
-  const handleConfirm = () => {
-    if (!booking.patientName || !booking.patientPhone) {
-      toast.error('Por favor, preencha todos os campos obrigatórios');
+  const handlePayment = async () => {
+    if (!booking.patientName || !booking.patientEmail) {
+      toast.error('Por favor, preencha nome e email para continuar');
       return;
     }
 
-    // Simulate WhatsApp redirect
-    const message = encodeURIComponent(
-      `Olá! Gostaria de confirmar meu agendamento:\n\n` +
-      `Paciente: ${booking.patientName}\n` +
-      `Especialidade: ${selectedSpecialty?.name}\n` +
-      `Profissional: ${selectedProfessional?.name}\n` +
-      `Data: ${booking.date ? format(new Date(booking.date), "dd 'de' MMMM", { locale: ptBR }) : ''}\n` +
-      `Horário: ${booking.time}\n\n` +
-      `Aguardo confirmação. Obrigado!`
-    );
+    if (!selectedService || !selectedProfessional || !booking.date || !booking.time) {
+      toast.error('Dados incompletos. Por favor, revise seu agendamento.');
+      return;
+    }
 
-    window.open(`https://wa.me/5511999999999?text=${message}`, '_blank');
-    
-    toast.success('Agendamento enviado! Aguarde a confirmação via WhatsApp.');
+    setProcessing(true);
+
+    try {
+      const { data, error } = await supabase.functions.invoke('create-payment', {
+        body: {
+          serviceName: selectedService.name,
+          servicePrice: selectedService.price_cents,
+          stripePriceId: selectedService.stripe_price_id,
+          professionalName: selectedProfessional.name,
+          professionalId: selectedProfessional.id,
+          appointmentDate: booking.date,
+          appointmentTime: booking.time,
+          patientName: booking.patientName,
+          patientEmail: booking.patientEmail,
+          patientPhone: booking.patientPhone
+        }
+      });
+
+      if (error) throw error;
+
+      if (data?.url) {
+        window.location.href = data.url;
+      } else {
+        throw new Error('No checkout URL received');
+      }
+    } catch (error) {
+      console.error('Payment error:', error);
+      toast.error('Erro ao processar pagamento. Tente novamente.');
+      setProcessing(false);
+    }
   };
 
   const goBack = () => {
-    if (step === 'professional') setStep('specialty');
+    if (step === 'professional') setStep('service');
     else if (step === 'datetime') setStep('professional');
     else if (step === 'confirm') setStep('datetime');
   };
 
   const canProceedToConfirm = booking.date && booking.time;
+
+  if (loading) {
+    return (
+      <PublicLayout>
+        <div className="min-h-[calc(100vh-200px)] flex items-center justify-center">
+          <Loader2 className="h-8 w-8 animate-spin text-clinic-primary" />
+        </div>
+      </PublicLayout>
+    );
+  }
 
   return (
     <PublicLayout>
@@ -147,18 +220,18 @@ export default function BookingPage() {
           <div className="max-w-3xl mx-auto mb-8">
             <div className="flex items-center justify-between">
               {[
-                { key: 'specialty', label: 'Especialidade' },
+                { key: 'service', label: 'Serviço' },
                 { key: 'professional', label: 'Profissional' },
                 { key: 'datetime', label: 'Data e Hora' },
-                { key: 'confirm', label: 'Confirmação' },
+                { key: 'confirm', label: 'Pagamento' },
               ].map((s, i) => (
                 <div key={s.key} className="flex items-center">
                   <div
                     className={`h-8 w-8 rounded-full flex items-center justify-center text-sm font-medium transition-colors ${
                       step === s.key
                         ? 'bg-clinic-primary text-foreground'
-                        : ['specialty', 'professional', 'datetime', 'confirm'].indexOf(step) >
-                          ['specialty', 'professional', 'datetime', 'confirm'].indexOf(s.key)
+                        : ['service', 'professional', 'datetime', 'confirm'].indexOf(step) >
+                          ['service', 'professional', 'datetime', 'confirm'].indexOf(s.key)
                         ? 'bg-clinic-primary/20 text-clinic-primary'
                         : 'bg-clinic-border-subtle text-clinic-text-muted'
                     }`}
@@ -178,7 +251,7 @@ export default function BookingPage() {
 
           {/* Content */}
           <div className="max-w-4xl mx-auto">
-            {step !== 'specialty' && (
+            {step !== 'service' && (
               <button
                 onClick={goBack}
                 className="flex items-center gap-2 text-sm text-clinic-text-secondary hover:text-foreground mb-6 transition-colors"
@@ -188,32 +261,32 @@ export default function BookingPage() {
               </button>
             )}
 
-            {/* Step 1: Specialty */}
-            {step === 'specialty' && (
+            {/* Step 1: Service */}
+            {step === 'service' && (
               <div className="animate-fade-in">
-                <h1 className="text-2xl font-bold mb-2">Escolha a Especialidade</h1>
+                <h1 className="text-2xl font-bold mb-2">Escolha o Serviço</h1>
                 <p className="text-clinic-text-secondary mb-8">
-                  Selecione a área médica para sua consulta
+                  Selecione a consulta desejada
                 </p>
 
                 <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {specialties.map((specialty) => (
+                  {services.map((service) => (
                     <button
-                      key={specialty.id}
-                      onClick={() => handleSelectSpecialty(specialty.id)}
+                      key={service.id}
+                      onClick={() => handleSelectService(service.id)}
                       className="text-left bg-background border border-clinic-border-subtle rounded-xl p-5 hover:border-clinic-primary hover:shadow-clinic-md transition-all group"
                     >
                       <div className="h-10 w-10 rounded-lg bg-clinic-primary/10 flex items-center justify-center text-clinic-primary mb-3 group-hover:bg-clinic-primary group-hover:text-foreground transition-colors">
-                        {iconMap[specialty.icon] || <Stethoscope className="h-5 w-5" />}
+                        <Stethoscope className="h-5 w-5" />
                       </div>
-                      <h3 className="font-semibold mb-1">{specialty.name}</h3>
-                      <p className="text-sm text-clinic-text-muted line-clamp-1">
-                        {specialty.description}
+                      <h3 className="font-semibold mb-1">{service.name}</h3>
+                      <p className="text-sm text-clinic-text-muted line-clamp-2">
+                        {service.description}
                       </p>
                       <div className="mt-3 flex items-center justify-between text-sm">
-                        <span className="text-clinic-text-secondary">{specialty.duration} min</span>
+                        <span className="text-clinic-text-secondary">{service.duration_minutes} min</span>
                         <span className="font-medium text-clinic-primary">
-                          R$ {specialty.price.toFixed(2)}
+                          R$ {(service.price_cents / 100).toFixed(2)}
                         </span>
                       </div>
                     </button>
@@ -227,7 +300,7 @@ export default function BookingPage() {
               <div className="animate-fade-in">
                 <h1 className="text-2xl font-bold mb-2">Escolha o Profissional</h1>
                 <p className="text-clinic-text-secondary mb-8">
-                  {selectedSpecialty?.name} - Selecione um de nossos especialistas
+                  {selectedService?.name} - Selecione um de nossos especialistas
                 </p>
 
                 <div className="grid sm:grid-cols-2 gap-4">
@@ -274,7 +347,7 @@ export default function BookingPage() {
               <div className="animate-fade-in">
                 <h1 className="text-2xl font-bold mb-2">Escolha Data e Horário</h1>
                 <p className="text-clinic-text-secondary mb-8">
-                  {selectedProfessional?.name} - {selectedSpecialty?.name}
+                  {selectedProfessional?.name} - {selectedService?.name}
                 </p>
 
                 <div className="grid lg:grid-cols-2 gap-8">
@@ -394,12 +467,12 @@ export default function BookingPage() {
               </div>
             )}
 
-            {/* Step 4: Confirmation */}
+            {/* Step 4: Payment */}
             {step === 'confirm' && (
               <div className="animate-fade-in">
-                <h1 className="text-2xl font-bold mb-2">Confirme seus Dados</h1>
+                <h1 className="text-2xl font-bold mb-2">Finalizar Agendamento</h1>
                 <p className="text-clinic-text-secondary mb-8">
-                  Revise as informações e preencha seus dados para finalizar
+                  Preencha seus dados e realize o pagamento
                 </p>
 
                 <div className="grid lg:grid-cols-2 gap-8">
@@ -417,7 +490,7 @@ export default function BookingPage() {
                         <div>
                           <p className="font-medium">{selectedProfessional?.name}</p>
                           <p className="text-sm text-clinic-text-secondary">
-                            {selectedSpecialty?.name}
+                            {selectedService?.name}
                           </p>
                           <div className="flex items-center gap-1 mt-1">
                             <Star className="h-3.5 w-3.5 fill-warning text-warning" />
@@ -438,14 +511,14 @@ export default function BookingPage() {
                         </div>
                         <div className="flex items-center gap-3 text-sm">
                           <Clock className="h-4 w-4 text-clinic-primary" />
-                          <span>{booking.time} - {selectedSpecialty?.duration} minutos</span>
+                          <span>{booking.time} - {selectedService?.duration_minutes} minutos</span>
                         </div>
                       </div>
 
                       <div className="border-t border-clinic-border-subtle pt-4 flex items-center justify-between">
                         <span className="text-clinic-text-secondary">Valor da Consulta</span>
                         <span className="text-xl font-bold text-clinic-primary">
-                          R$ {selectedSpecialty?.price.toFixed(2)}
+                          R$ {selectedService ? (selectedService.price_cents / 100).toFixed(2) : '0.00'}
                         </span>
                       </div>
                     </div>
@@ -469,19 +542,7 @@ export default function BookingPage() {
                       </div>
 
                       <div className="space-y-2">
-                        <Label htmlFor="phone">WhatsApp *</Label>
-                        <Input
-                          id="phone"
-                          placeholder="(11) 99999-9999"
-                          value={booking.patientPhone}
-                          onChange={(e) =>
-                            setBooking((prev) => ({ ...prev, patientPhone: e.target.value }))
-                          }
-                        />
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label htmlFor="email">E-mail (opcional)</Label>
+                        <Label htmlFor="email">E-mail *</Label>
                         <Input
                           id="email"
                           type="email"
@@ -493,19 +554,41 @@ export default function BookingPage() {
                         />
                       </div>
 
+                      <div className="space-y-2">
+                        <Label htmlFor="phone">WhatsApp (opcional)</Label>
+                        <Input
+                          id="phone"
+                          placeholder="(11) 99999-9999"
+                          value={booking.patientPhone}
+                          onChange={(e) =>
+                            setBooking((prev) => ({ ...prev, patientPhone: e.target.value }))
+                          }
+                        />
+                      </div>
+
                       <div className="pt-4">
                         <Button
                           variant="clinic"
                           size="lg"
                           className="w-full"
-                          onClick={handleConfirm}
+                          onClick={handlePayment}
+                          disabled={processing}
                         >
-                          <Phone className="h-4 w-4" />
-                          Confirmar via WhatsApp
+                          {processing ? (
+                            <>
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                              Processando...
+                            </>
+                          ) : (
+                            <>
+                              <CreditCard className="h-4 w-4" />
+                              Pagar R$ {selectedService ? (selectedService.price_cents / 100).toFixed(2) : '0.00'}
+                            </>
+                          )}
                         </Button>
 
                         <p className="text-xs text-clinic-text-muted text-center mt-3">
-                          Você será redirecionado para o WhatsApp para confirmar seu agendamento
+                          Pagamento seguro via Stripe. Você será redirecionado para finalizar.
                         </p>
                       </div>
                     </div>

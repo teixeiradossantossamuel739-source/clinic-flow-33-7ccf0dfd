@@ -7,6 +7,7 @@ import HomePage from "./pages/HomePage";
 import SpecialtiesPage from "./pages/SpecialtiesPage";
 import ProfessionalsPage from "./pages/ProfessionalsPage";
 import BookingPage from "./pages/BookingPage";
+import BookingSuccessPage from "./pages/BookingSuccessPage";
 import AdminDashboard from "./pages/admin/AdminDashboard";
 import AdminAgenda from "./pages/admin/AdminAgenda";
 import AdminPatients from "./pages/admin/AdminPatients";
@@ -29,6 +30,7 @@ const App = () => (
           <Route path="/especialidades" element={<SpecialtiesPage />} />
           <Route path="/profissionais" element={<ProfessionalsPage />} />
           <Route path="/agendar" element={<BookingPage />} />
+          <Route path="/agendamento-sucesso" element={<BookingSuccessPage />} />
           
           {/* Admin Routes */}
           <Route path="/admin" element={<AdminDashboard />} />
