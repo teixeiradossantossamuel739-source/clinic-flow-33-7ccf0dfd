@@ -46,6 +46,7 @@ interface Professional {
   rating: number | null;
   review_count: number | null;
   is_active: boolean;
+  profession: string;
 }
 
 interface ProfessionalSchedule {
@@ -57,6 +58,15 @@ interface ProfessionalSchedule {
   slot_duration_minutes: number;
   is_active: boolean;
 }
+
+const PROFESSIONS = [
+  { id: 'Médico', name: 'Médico' },
+  { id: 'Dentista', name: 'Dentista' },
+  { id: 'Psicólogo', name: 'Psicólogo' },
+  { id: 'Enfermeiro', name: 'Enfermeiro' },
+  { id: 'Fisioterapeuta', name: 'Fisioterapeuta' },
+  { id: 'Nutricionista', name: 'Nutricionista' },
+];
 
 const SPECIALTIES = [
   { id: 'clinica-geral', name: 'Clínica Geral' },
@@ -287,6 +297,7 @@ function ProfessionalForm({ professional, onSuccess }: ProfessionalFormProps) {
     name: professional?.name || '',
     email: professional?.email || '',
     phone: professional?.phone || '',
+    profession: professional?.profession || 'Médico',
     specialty_id: professional?.specialty_id || 'clinica-geral',
     crm: professional?.crm || '',
     bio: professional?.bio || '',
@@ -364,20 +375,37 @@ function ProfessionalForm({ professional, onSuccess }: ProfessionalFormProps) {
         </div>
       </div>
 
-      <div className="space-y-2">
-        <Label htmlFor="specialty">Especialidade *</Label>
-        <select
-          id="specialty"
-          value={formData.specialty_id}
-          onChange={(e) => setFormData({ ...formData, specialty_id: e.target.value })}
-          className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm"
-        >
-          {SPECIALTIES.map((s) => (
-            <option key={s.id} value={s.id}>
-              {s.name}
-            </option>
-          ))}
-        </select>
+      <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label htmlFor="profession">Profissão *</Label>
+          <select
+            id="profession"
+            value={formData.profession}
+            onChange={(e) => setFormData({ ...formData, profession: e.target.value })}
+            className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm"
+          >
+            {PROFESSIONS.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="specialty">Especialidade *</Label>
+          <select
+            id="specialty"
+            value={formData.specialty_id}
+            onChange={(e) => setFormData({ ...formData, specialty_id: e.target.value })}
+            className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm"
+          >
+            {SPECIALTIES.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name}
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
 
       <div className="space-y-2">
