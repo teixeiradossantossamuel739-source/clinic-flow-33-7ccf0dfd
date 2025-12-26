@@ -27,6 +27,7 @@ export type Database = {
           patient_phone: string
           payment_status: string
           professional_id: string
+          professional_uuid: string | null
           service_id: string | null
           status: string
           stripe_payment_intent_id: string | null
@@ -45,6 +46,7 @@ export type Database = {
           patient_phone: string
           payment_status?: string
           professional_id: string
+          professional_uuid?: string | null
           service_id?: string | null
           status?: string
           stripe_payment_intent_id?: string | null
@@ -63,6 +65,7 @@ export type Database = {
           patient_phone?: string
           payment_status?: string
           professional_id?: string
+          professional_uuid?: string | null
           service_id?: string | null
           status?: string
           stripe_payment_intent_id?: string | null
@@ -71,6 +74,13 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "appointments_professional_uuid_fkey"
+            columns: ["professional_uuid"]
+            isOneToOne: false
+            referencedRelation: "professionals"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "appointments_service_id_fkey"
             columns: ["service_id"]
             isOneToOne: false
@@ -78,6 +88,98 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      professional_schedules: {
+        Row: {
+          created_at: string
+          day_of_week: number
+          end_time: string
+          id: string
+          is_active: boolean
+          professional_id: string
+          slot_duration_minutes: number
+          start_time: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          day_of_week: number
+          end_time: string
+          id?: string
+          is_active?: boolean
+          professional_id: string
+          slot_duration_minutes?: number
+          start_time: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          day_of_week?: number
+          end_time?: string
+          id?: string
+          is_active?: boolean
+          professional_id?: string
+          slot_duration_minutes?: number
+          start_time?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "professional_schedules_professional_id_fkey"
+            columns: ["professional_id"]
+            isOneToOne: false
+            referencedRelation: "professionals"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      professionals: {
+        Row: {
+          avatar_url: string | null
+          bio: string | null
+          created_at: string
+          crm: string | null
+          email: string
+          id: string
+          is_active: boolean
+          name: string
+          phone: string | null
+          rating: number | null
+          review_count: number | null
+          specialty_id: string
+          updated_at: string
+        }
+        Insert: {
+          avatar_url?: string | null
+          bio?: string | null
+          created_at?: string
+          crm?: string | null
+          email: string
+          id?: string
+          is_active?: boolean
+          name: string
+          phone?: string | null
+          rating?: number | null
+          review_count?: number | null
+          specialty_id: string
+          updated_at?: string
+        }
+        Update: {
+          avatar_url?: string | null
+          bio?: string | null
+          created_at?: string
+          crm?: string | null
+          email?: string
+          id?: string
+          is_active?: boolean
+          name?: string
+          phone?: string | null
+          rating?: number | null
+          review_count?: number | null
+          specialty_id?: string
+          updated_at?: string
+        }
+        Relationships: []
       }
       services: {
         Row: {
