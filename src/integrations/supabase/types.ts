@@ -144,6 +144,7 @@ export type Database = {
           is_active: boolean
           name: string
           phone: string | null
+          profession: string
           rating: number | null
           review_count: number | null
           specialty_id: string
@@ -159,6 +160,7 @@ export type Database = {
           is_active?: boolean
           name: string
           phone?: string | null
+          profession?: string
           rating?: number | null
           review_count?: number | null
           specialty_id: string
@@ -174,6 +176,7 @@ export type Database = {
           is_active?: boolean
           name?: string
           phone?: string | null
+          profession?: string
           rating?: number | null
           review_count?: number | null
           specialty_id?: string
