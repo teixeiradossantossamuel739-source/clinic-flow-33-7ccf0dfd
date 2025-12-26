@@ -10,6 +10,7 @@ interface Profile {
   full_name: string | null;
   email: string;
   phone: string | null;
+  whatsapp: string | null;
   avatar_url: string | null;
 }
 
@@ -20,7 +21,8 @@ interface AuthContextType {
   role: AppRole | null;
   loading: boolean;
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
-  signUp: (email: string, password: string, fullName: string) => Promise<{ error: Error | null }>;
+  signInWithOtp: (email: string, fullName?: string, whatsapp?: string) => Promise<{ error: Error | null }>;
+  signUp: (email: string, password: string, fullName: string, role?: AppRole) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
   isAdmin: boolean;
   isFuncionario: boolean;
@@ -45,7 +47,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .maybeSingle();
 
     if (profileData) {
-      setProfile(profileData);
+      setProfile(profileData as Profile);
     }
 
     // Fetch role using RPC
@@ -105,7 +107,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return { error };
   };
 
-  const signUp = async (email: string, password: string, fullName: string) => {
+  const signInWithOtp = async (email: string, fullName?: string, whatsapp?: string) => {
+    const redirectUrl = `${window.location.origin}/`;
+    
+    const { error } = await supabase.auth.signInWithOtp({
+      email: email.trim().toLowerCase(),
+      options: {
+        emailRedirectTo: redirectUrl,
+        data: {
+          full_name: fullName,
+          whatsapp: whatsapp,
+          role: 'cliente',
+        },
+      },
+    });
+    return { error };
+  };
+
+  const signUp = async (email: string, password: string, fullName: string, role?: AppRole) => {
     const redirectUrl = `${window.location.origin}/`;
     
     const { error } = await supabase.auth.signUp({
@@ -115,6 +134,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         emailRedirectTo: redirectUrl,
         data: {
           full_name: fullName,
+          role: role || 'cliente',
         },
       },
     });
@@ -136,6 +156,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     role,
     loading,
     signIn,
+    signInWithOtp,
     signUp,
     signOut,
     isAdmin: role === 'admin',
