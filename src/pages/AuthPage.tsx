@@ -197,7 +197,7 @@ export default function AuthPage() {
               }`}
             >
               <Shield className="h-4 w-4" />
-              Funcionário
+              Equipe
             </button>
           </div>
 

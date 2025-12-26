@@ -34,16 +34,50 @@ serve(async (req) => {
 
     const { email, password, fullName, role }: CreateUserRequest = await req.json();
 
-    logStep("Creating user", { email, fullName, role });
+    logStep("Processing user", { email, fullName, role });
 
     // Check if user already exists
     const { data: existingUsers } = await supabaseAdmin.auth.admin.listUsers();
-    const userExists = existingUsers?.users?.some(u => u.email === email);
+    const existingUser = existingUsers?.users?.find(u => u.email === email);
 
-    if (userExists) {
-      logStep("User already exists", { email });
+    if (existingUser) {
+      logStep("User already exists, updating password and role", { email, userId: existingUser.id });
+      
+      // Update password
+      const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(
+        existingUser.id,
+        { 
+          password,
+          user_metadata: { full_name: fullName }
+        }
+      );
+
+      if (updateError) {
+        logStep("Error updating user password", { error: updateError.message });
+        throw updateError;
+      }
+
+      // Update role in user_roles table (upsert)
+      const { error: roleError } = await supabaseAdmin
+        .from('user_roles')
+        .upsert(
+          { user_id: existingUser.id, role },
+          { onConflict: 'user_id' }
+        );
+
+      if (roleError) {
+        logStep("Error updating user role", { error: roleError.message });
+        throw roleError;
+      }
+
+      logStep("User updated successfully", { userId: existingUser.id, email });
+
       return new Response(
-        JSON.stringify({ message: "User already exists", email }),
+        JSON.stringify({ 
+          message: "User already exists", 
+          updated: true,
+          user: { id: existingUser.id, email } 
+        }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 }
       );
     }
@@ -55,7 +89,6 @@ serve(async (req) => {
       email_confirm: true,
       user_metadata: {
         full_name: fullName,
-        role: role,
       },
     });
 
@@ -64,7 +97,28 @@ serve(async (req) => {
       throw createError;
     }
 
-    logStep("User created successfully", { userId: newUser.user?.id, email });
+    logStep("User created in auth", { userId: newUser.user?.id, email });
+
+    // The trigger will create the profile and default 'cliente' role
+    // Now we need to update the role to the correct one if not cliente
+    if (role !== 'cliente' && newUser.user?.id) {
+      // Wait a moment for the trigger to complete
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      const { error: roleError } = await supabaseAdmin
+        .from('user_roles')
+        .update({ role })
+        .eq('user_id', newUser.user.id);
+
+      if (roleError) {
+        logStep("Error setting user role", { error: roleError.message });
+        // Don't throw, user was created, just log the error
+      } else {
+        logStep("User role updated", { userId: newUser.user.id, role });
+      }
+    }
+
+    logStep("User created successfully", { userId: newUser.user?.id, email, role });
 
     return new Response(
       JSON.stringify({ 
