@@ -57,6 +57,32 @@ serve(async (req) => {
       throw new Error("Missing required fields");
     }
 
+    // Best-effort: release abandoned pending reservations for this exact slot
+    // so users can retry payment without being blocked.
+    const staleCutoffIso = new Date(Date.now() - 15 * 60 * 1000).toISOString();
+
+    try {
+      const { error: expireError } = await supabaseClient
+        .from('appointments')
+        .update({
+          status: 'cancelled',
+          payment_status: 'expired',
+          notes: 'Reserva pendente expirada automaticamente (timeout).',
+        })
+        .eq('professional_id', professionalId)
+        .eq('appointment_date', appointmentDate)
+        .eq('appointment_time', appointmentTime)
+        .eq('status', 'pending')
+        .eq('payment_status', 'pending')
+        .lt('created_at', staleCutoffIso);
+
+      if (expireError) {
+        logStep('Failed to expire stale pending appointment', { error: expireError });
+      }
+    } catch (expireErr) {
+      logStep('Failed to expire stale pending appointment (exception)', { expireErr });
+    }
+
     // Check if time slot is still available
     const { data: existingAppointments, error: checkError } = await supabaseClient
       .from('appointments')
