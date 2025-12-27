@@ -32,11 +32,15 @@ export function ProtectedRoute({
 
   // Check role permissions
   if (allowedRoles && role && !allowedRoles.includes(role)) {
-    // Redirect based on role
+    // Redirect based on role to appropriate area
+    if (role === 'funcionario') {
+      return <Navigate to="/funcionario" replace />;
+    }
     if (role === 'cliente') {
       return <Navigate to="/minhas-consultas" replace />;
     }
-    return <Navigate to="/" replace />;
+    // Fallback for unknown roles
+    return <Navigate to="/auth" replace />;
   }
 
   return <>{children}</>;
