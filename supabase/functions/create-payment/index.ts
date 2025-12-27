@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
+import { MercadoPagoConfig, Preference } from "https://esm.sh/mercadopago@2.0.15";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -104,10 +105,15 @@ serve(async (req) => {
 
     const origin = req.headers.get("origin") || "http://localhost:5173";
 
-    // Create Mercado Pago preference
+    // Initialize Mercado Pago SDK
+    const client = new MercadoPagoConfig({ accessToken: mpAccessToken });
+    const preferenceApi = new Preference(client);
+
+    // Create Mercado Pago preference using SDK
     const preferenceData = {
       items: [
         {
+          id: appointment.id,
           title: serviceName || "Consulta",
           description: `Consulta com ${professionalName} em ${appointmentDate} às ${appointmentTime}`,
           quantity: 1,
@@ -131,57 +137,45 @@ serve(async (req) => {
       external_reference: appointment.id,
       notification_url: `${Deno.env.get("SUPABASE_URL")}/functions/v1/mercadopago-webhook`,
       payment_methods: {
-        excluded_payment_types: [],
         installments: 1,
       },
       statement_descriptor: "CONSULTA SAUDE",
     };
 
-    logStep("Creating Mercado Pago preference", { preferenceData });
+    logStep("Creating Mercado Pago preference with SDK", { preferenceData });
 
-    const mpResponse = await fetch("https://api.mercadopago.com/checkout/preferences", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${mpAccessToken}`,
-      },
-      body: JSON.stringify(preferenceData),
-    });
+    let preference;
+    try {
+      preference = await preferenceApi.create({ body: preferenceData });
+      logStep("Mercado Pago preference created", { preferenceId: preference.id, initPoint: preference.init_point });
+    } catch (mpError: any) {
+      logStep("Mercado Pago SDK error", { error: mpError.message, cause: mpError.cause });
 
-    if (!mpResponse.ok) {
-      const errorData = await mpResponse.text();
-      logStep("Mercado Pago error", { status: mpResponse.status, error: errorData });
-
-      // IMPORTANT: do not keep the slot blocked when payment provider rejects the preference.
-      // Mark as cancelled/failed so it won't be considered a valid reservation.
+      // Cancel appointment if MP fails
       try {
         await supabaseClient
           .from('appointments')
           .update({
             status: 'cancelled',
             payment_status: 'failed',
-            notes: `Mercado Pago error (${mpResponse.status}): ${errorData}`.slice(0, 1000),
+            notes: `Mercado Pago error: ${mpError.message}`.slice(0, 1000),
           })
           .eq('id', appointment.id);
       } catch (cleanupErr) {
         logStep("Failed to cancel appointment after MP error", { cleanupErr });
       }
 
-      // Surface a clearer message for the frontend
       throw new Error(
-        mpResponse.status === 403
-          ? "Pagamento bloqueado pelo Mercado Pago (políticas). Verifique se seu Access Token é de PRODUÇÃO e se a conta está habilitada para receber pagamentos."
-          : `Mercado Pago error: ${errorData}`
+        mpError.message?.includes("UNAUTHORIZED") || mpError.cause?.status === 403
+          ? "Pagamento bloqueado pelo Mercado Pago. Verifique se seu Access Token é de PRODUÇÃO e se a conta está habilitada."
+          : `Mercado Pago error: ${mpError.message}`
       );
     }
-
-    const preference = await mpResponse.json();
-    logStep("Mercado Pago preference created", { preferenceId: preference.id, initPoint: preference.init_point });
 
     // Update appointment with preference ID
     await supabaseClient
       .from('appointments')
-      .update({ stripe_session_id: preference.id }) // Reusing stripe_session_id field for MP preference ID
+      .update({ stripe_session_id: preference.id })
       .eq('id', appointment.id);
 
     return new Response(JSON.stringify({ 
