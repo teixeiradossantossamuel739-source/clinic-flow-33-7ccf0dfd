@@ -22,6 +22,11 @@ import AdminReports from "./pages/admin/AdminReports";
 import AdminSettings from "./pages/admin/AdminSettings";
 import AdminProfessionals from "./pages/admin/AdminProfessionals";
 import ProfessionalDashboard from "./pages/admin/ProfessionalDashboard";
+import FuncionarioDashboard from "./pages/funcionario/FuncionarioDashboard";
+import FuncionarioAgenda from "./pages/funcionario/FuncionarioAgenda";
+import FuncionarioFinanceiro from "./pages/funcionario/FuncionarioFinanceiro";
+import FuncionarioDisponibilidade from "./pages/funcionario/FuncionarioDisponibilidade";
+import FuncionarioPerfil from "./pages/funcionario/FuncionarioPerfil";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -107,6 +112,48 @@ const App = () => (
               element={
                 <ProtectedRoute allowedRoles={['admin']}>
                   <AdminSettings />
+                </ProtectedRoute>
+              }
+            />
+            
+            {/* Funcionario Routes */}
+            <Route
+              path="/funcionario"
+              element={
+                <ProtectedRoute allowedRoles={['funcionario', 'admin']}>
+                  <FuncionarioDashboard />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/funcionario/agenda"
+              element={
+                <ProtectedRoute allowedRoles={['funcionario', 'admin']}>
+                  <FuncionarioAgenda />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/funcionario/financeiro"
+              element={
+                <ProtectedRoute allowedRoles={['funcionario', 'admin']}>
+                  <FuncionarioFinanceiro />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/funcionario/disponibilidade"
+              element={
+                <ProtectedRoute allowedRoles={['funcionario', 'admin']}>
+                  <FuncionarioDisponibilidade />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/funcionario/perfil"
+              element={
+                <ProtectedRoute allowedRoles={['funcionario', 'admin']}>
+                  <FuncionarioPerfil />
                 </ProtectedRoute>
               }
             />
