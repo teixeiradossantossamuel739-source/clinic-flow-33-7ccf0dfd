@@ -232,7 +232,7 @@ export default function ProfessionalDashboard() {
       <AdminLayout>
         <div className="text-center py-12">
           <p className="text-clinic-text-muted">Profissional não encontrado</p>
-          <Link to="/admin/profissionais">
+          <Link to="/admin/funcionarios">
             <Button variant="ghost" className="mt-4">
               <ArrowLeft className="h-4 w-4 mr-2" />
               Voltar
@@ -248,7 +248,7 @@ export default function ProfessionalDashboard() {
       <div className="space-y-6">
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center gap-4">
-          <Link to="/admin/profissionais">
+          <Link to="/admin/funcionarios">
             <Button variant="ghost" size="sm">
               <ArrowLeft className="h-4 w-4" />
               Voltar
