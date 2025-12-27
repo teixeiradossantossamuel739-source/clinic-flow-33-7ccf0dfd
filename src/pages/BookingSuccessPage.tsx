@@ -25,7 +25,10 @@ interface AppointmentDetails {
 export default function BookingSuccessPage() {
   const [searchParams] = useSearchParams();
   const appointmentId = searchParams.get('appointment_id');
-  const sessionId = searchParams.get('session_id');
+  // Mercado Pago callback params
+  const paymentId = searchParams.get('payment_id');
+  const collectionStatus = searchParams.get('collection_status');
+  const isPending = searchParams.get('pending') === 'true';
   
   const [loading, setLoading] = useState(true);
   const [appointment, setAppointment] = useState<AppointmentDetails | null>(null);
@@ -35,19 +38,23 @@ export default function BookingSuccessPage() {
 
   useEffect(() => {
     async function verifyPayment() {
-      if (!sessionId || !appointmentId) {
+      if (!appointmentId) {
         setLoading(false);
         return;
       }
 
       try {
         const { data, error } = await supabase.functions.invoke('verify-payment', {
-          body: { sessionId, appointmentId }
+          body: { 
+            appointmentId,
+            paymentId,
+            collectionStatus
+          }
         });
 
         if (error) throw error;
 
-        if (data?.paid && data?.appointment) {
+        if (data?.success && data?.appointment) {
           setAppointment(data.appointment);
           setVerified(true);
           
@@ -56,6 +63,10 @@ export default function BookingSuccessPage() {
           }
           
           toast.success('Pagamento confirmado! Seu agendamento está garantido.');
+        } else if (data?.pending) {
+          setAppointment(data.appointment);
+          setVerified(false);
+          toast.info('Pagamento pendente. Você será notificado quando for confirmado.');
         } else {
           toast.error('Pagamento ainda não confirmado. Verifique em alguns minutos.');
         }
@@ -68,7 +79,7 @@ export default function BookingSuccessPage() {
     }
 
     verifyPayment();
-  }, [sessionId, appointmentId]);
+  }, [appointmentId, paymentId, collectionStatus]);
 
   const handleSendWhatsApp = () => {
     if (whatsappLink) {
