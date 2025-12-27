@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { AdminLayout } from '@/components/layout/AdminLayout';
 import { supabase } from '@/integrations/supabase/client';
@@ -8,20 +8,23 @@ import {
   Search,
   Plus,
   Star,
-  Calendar,
-  DollarSign,
   MoreHorizontal,
   Edit,
   Trash2,
   BarChart3,
   Loader2,
   Clock,
+  Upload,
+  User,
+  Power,
+  PowerOff,
 } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
+  DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu';
 import {
   Dialog,
@@ -30,8 +33,19 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 
 interface Professional {
@@ -96,6 +110,9 @@ export default function AdminProfessionals() {
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingProfessional, setEditingProfessional] = useState<Professional | null>(null);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [professionalToDelete, setProfessionalToDelete] = useState<Professional | null>(null);
+  const [showInactive, setShowInactive] = useState(false);
 
   const fetchData = async () => {
     const [profRes, schedRes] = await Promise.all([
@@ -112,12 +129,17 @@ export default function AdminProfessionals() {
     fetchData();
   }, []);
 
-  const filteredProfessionals = professionals.filter(
-    (p) =>
+  const filteredProfessionals = professionals.filter((p) => {
+    const matchesSearch =
       p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       p.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      p.specialty_id.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+      p.specialty_id.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      p.profession.toLowerCase().includes(searchQuery.toLowerCase());
+    
+    const matchesActive = showInactive ? true : p.is_active;
+    
+    return matchesSearch && matchesActive;
+  });
 
   const getSpecialtyName = (id: string) => {
     return SPECIALTIES.find((s) => s.id === id)?.name || id;
@@ -128,6 +150,48 @@ export default function AdminProfessionals() {
       .filter((s) => s.professional_id === professionalId && s.is_active)
       .map((s) => DAYS_OF_WEEK.find((d) => d.value === s.day_of_week)?.label?.slice(0, 3))
       .filter(Boolean);
+  };
+
+  const handleToggleActive = async (professional: Professional) => {
+    try {
+      const { error } = await supabase
+        .from('professionals')
+        .update({ is_active: !professional.is_active })
+        .eq('id', professional.id);
+
+      if (error) throw error;
+
+      toast.success(
+        professional.is_active 
+          ? 'Funcionário desativado com sucesso' 
+          : 'Funcionário ativado com sucesso'
+      );
+      fetchData();
+    } catch (error) {
+      console.error('Error toggling professional status:', error);
+      toast.error('Erro ao alterar status do funcionário');
+    }
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!professionalToDelete) return;
+
+    try {
+      const { error } = await supabase
+        .from('professionals')
+        .delete()
+        .eq('id', professionalToDelete.id);
+
+      if (error) throw error;
+
+      toast.success('Funcionário excluído permanentemente');
+      setDeleteConfirmOpen(false);
+      setProfessionalToDelete(null);
+      fetchData();
+    } catch (error) {
+      console.error('Error deleting professional:', error);
+      toast.error('Erro ao excluir funcionário. Verifique se não há agendamentos vinculados.');
+    }
   };
 
   if (loading) {
@@ -146,22 +210,22 @@ export default function AdminProfessionals() {
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold">Profissionais</h1>
+            <h1 className="text-2xl font-bold">Funcionários</h1>
             <p className="text-clinic-text-secondary">
-              {professionals.length} profissionais cadastrados
+              {professionals.filter(p => p.is_active).length} funcionários ativos
             </p>
           </div>
           <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
             <DialogTrigger asChild>
               <Button variant="clinic" onClick={() => setEditingProfessional(null)}>
                 <Plus className="h-4 w-4" />
-                Novo Profissional
+                Novo Funcionário
               </Button>
             </DialogTrigger>
-            <DialogContent className="max-w-md">
+            <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>
-                  {editingProfessional ? 'Editar Profissional' : 'Novo Profissional'}
+                  {editingProfessional ? 'Editar Funcionário' : 'Novo Funcionário'}
                 </DialogTitle>
               </DialogHeader>
               <ProfessionalForm
@@ -175,17 +239,26 @@ export default function AdminProfessionals() {
           </Dialog>
         </div>
 
-        {/* Search */}
+        {/* Search and Filters */}
         <div className="bg-background rounded-2xl p-4 shadow-clinic-sm">
-          <div className="flex items-center gap-2 bg-clinic-surface rounded-xl px-4 py-2 max-w-md">
-            <Search className="h-4 w-4 text-clinic-text-muted" />
-            <Input
-              type="text"
-              placeholder="Buscar por nome, email ou especialidade..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="bg-transparent border-none shadow-none px-0 focus-visible:ring-0"
-            />
+          <div className="flex flex-col sm:flex-row gap-4">
+            <div className="flex items-center gap-2 bg-clinic-surface rounded-xl px-4 py-2 flex-1 max-w-md">
+              <Search className="h-4 w-4 text-clinic-text-muted" />
+              <Input
+                type="text"
+                placeholder="Buscar por nome, email, profissão..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="bg-transparent border-none shadow-none px-0 focus-visible:ring-0"
+              />
+            </div>
+            <Button
+              variant={showInactive ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => setShowInactive(!showInactive)}
+            >
+              {showInactive ? 'Mostrar apenas ativos' : 'Mostrar inativos'}
+            </Button>
           </div>
         </div>
 
@@ -194,21 +267,37 @@ export default function AdminProfessionals() {
           {filteredProfessionals.map((professional) => (
             <div
               key={professional.id}
-              className="bg-background rounded-2xl p-6 shadow-clinic-sm hover:shadow-clinic-md transition-shadow"
+              className={`bg-background rounded-2xl p-6 shadow-clinic-sm hover:shadow-clinic-md transition-shadow ${
+                !professional.is_active ? 'opacity-60' : ''
+              }`}
             >
               <div className="flex items-start justify-between mb-4">
                 <div className="flex items-center gap-4">
-                  <img
-                    src={professional.avatar_url || '/placeholder.svg'}
-                    alt={professional.name}
-                    className="h-14 w-14 rounded-xl object-cover"
-                  />
+                  <div className="relative">
+                    <img
+                      src={professional.avatar_url || '/placeholder.svg'}
+                      alt={professional.name}
+                      className="h-14 w-14 rounded-xl object-cover"
+                    />
+                    {!professional.is_active && (
+                      <div className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-destructive flex items-center justify-center">
+                        <PowerOff className="h-2.5 w-2.5 text-destructive-foreground" />
+                      </div>
+                    )}
+                  </div>
                   <div>
-                    <h3 className="font-semibold">{professional.name}</h3>
-                    <p className="text-sm text-clinic-text-muted">
+                    <div className="flex items-center gap-2">
+                      <h3 className="font-semibold">{professional.name}</h3>
+                      {!professional.is_active && (
+                        <Badge variant="secondary" className="text-xs">Inativo</Badge>
+                      )}
+                    </div>
+                    <p className="text-sm text-clinic-primary font-medium">
+                      {professional.profession}
+                    </p>
+                    <p className="text-xs text-clinic-text-muted">
                       {getSpecialtyName(professional.specialty_id)}
                     </p>
-                    <p className="text-xs text-clinic-text-muted">{professional.crm}</p>
                   </div>
                 </div>
                 <DropdownMenu>
@@ -233,19 +322,49 @@ export default function AdminProfessionals() {
                       <Edit className="h-4 w-4 mr-2" />
                       Editar
                     </DropdownMenuItem>
-                    <DropdownMenuItem className="text-destructive">
+                    <DropdownMenuItem onClick={() => handleToggleActive(professional)}>
+                      {professional.is_active ? (
+                        <>
+                          <PowerOff className="h-4 w-4 mr-2" />
+                          Desativar
+                        </>
+                      ) : (
+                        <>
+                          <Power className="h-4 w-4 mr-2" />
+                          Ativar
+                        </>
+                      )}
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      className="text-destructive"
+                      onClick={() => {
+                        setProfessionalToDelete(professional);
+                        setDeleteConfirmOpen(true);
+                      }}
+                    >
                       <Trash2 className="h-4 w-4 mr-2" />
-                      Desativar
+                      Excluir permanentemente
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
+              </div>
+
+              <div className="space-y-2 mb-4">
+                <p className="text-sm text-clinic-text-secondary">{professional.email}</p>
+                {professional.phone && (
+                  <p className="text-sm text-clinic-text-muted">{professional.phone}</p>
+                )}
+                {professional.crm && (
+                  <p className="text-xs text-clinic-text-muted">CRM: {professional.crm}</p>
+                )}
               </div>
 
               <div className="flex items-center gap-2 mb-3">
                 <Star className="h-4 w-4 fill-warning text-warning" />
                 <span className="text-sm font-medium">{professional.rating || 5.0}</span>
                 <span className="text-sm text-clinic-text-muted">
-                  ({professional.review_count || 0})
+                  ({professional.review_count || 0} avaliações)
                 </span>
               </div>
 
@@ -278,10 +397,34 @@ export default function AdminProfessionals() {
 
         {filteredProfessionals.length === 0 && (
           <div className="bg-background rounded-2xl p-12 shadow-clinic-sm text-center">
-            <p className="text-clinic-text-muted">Nenhum profissional encontrado</p>
+            <User className="h-12 w-12 mx-auto text-clinic-text-muted mb-4" />
+            <p className="text-clinic-text-muted">Nenhum funcionário encontrado</p>
           </div>
         )}
       </div>
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir funcionário permanentemente?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Você está prestes a excluir <strong>{professionalToDelete?.name}</strong> permanentemente.
+              Esta ação não pode ser desfeita. Recomendamos desativar o funcionário ao invés de excluí-lo
+              para preservar o histórico.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeleteConfirm}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Excluir permanentemente
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </AdminLayout>
   );
 }
@@ -293,6 +436,8 @@ interface ProfessionalFormProps {
 
 function ProfessionalForm({ professional, onSuccess }: ProfessionalFormProps) {
   const [loading, setLoading] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [formData, setFormData] = useState({
     name: professional?.name || '',
     email: professional?.email || '',
@@ -303,6 +448,51 @@ function ProfessionalForm({ professional, onSuccess }: ProfessionalFormProps) {
     bio: professional?.bio || '',
     avatar_url: professional?.avatar_url || '',
   });
+  const [previewUrl, setPreviewUrl] = useState<string>(professional?.avatar_url || '');
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      toast.error('Por favor, selecione uma imagem');
+      return;
+    }
+
+    // Validate file size (max 2MB)
+    if (file.size > 2 * 1024 * 1024) {
+      toast.error('A imagem deve ter no máximo 2MB');
+      return;
+    }
+
+    setUploading(true);
+
+    try {
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`;
+      const filePath = `professionals/${fileName}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('avatars')
+        .upload(filePath, file);
+
+      if (uploadError) throw uploadError;
+
+      const { data: { publicUrl } } = supabase.storage
+        .from('avatars')
+        .getPublicUrl(filePath);
+
+      setFormData({ ...formData, avatar_url: publicUrl });
+      setPreviewUrl(publicUrl);
+      toast.success('Foto enviada com sucesso');
+    } catch (error) {
+      console.error('Error uploading file:', error);
+      toast.error('Erro ao enviar foto');
+    } finally {
+      setUploading(false);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -316,18 +506,18 @@ function ProfessionalForm({ professional, onSuccess }: ProfessionalFormProps) {
           .eq('id', professional.id);
 
         if (error) throw error;
-        toast.success('Profissional atualizado com sucesso');
+        toast.success('Funcionário atualizado com sucesso');
       } else {
         const { error } = await supabase.from('professionals').insert(formData);
 
         if (error) throw error;
-        toast.success('Profissional cadastrado com sucesso');
+        toast.success('Funcionário cadastrado com sucesso');
       }
 
       onSuccess();
     } catch (error) {
       console.error('Error saving professional:', error);
-      toast.error('Erro ao salvar profissional');
+      toast.error('Erro ao salvar funcionário');
     } finally {
       setLoading(false);
     }
@@ -335,6 +525,45 @@ function ProfessionalForm({ professional, onSuccess }: ProfessionalFormProps) {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
+      {/* Avatar Upload */}
+      <div className="flex flex-col items-center gap-4">
+        <div className="relative">
+          <div className="h-24 w-24 rounded-2xl overflow-hidden bg-clinic-surface flex items-center justify-center">
+            {previewUrl ? (
+              <img
+                src={previewUrl}
+                alt="Preview"
+                className="h-full w-full object-cover"
+              />
+            ) : (
+              <User className="h-10 w-10 text-clinic-text-muted" />
+            )}
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            size="icon-sm"
+            className="absolute -bottom-2 -right-2 h-8 w-8 rounded-full"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={uploading}
+          >
+            {uploading ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Upload className="h-4 w-4" />
+            )}
+          </Button>
+        </div>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          onChange={handleFileUpload}
+          className="hidden"
+        />
+        <p className="text-xs text-clinic-text-muted">Clique para enviar uma foto</p>
+      </div>
+
       <div className="space-y-2">
         <Label htmlFor="name">Nome Completo *</Label>
         <Input
@@ -409,22 +638,13 @@ function ProfessionalForm({ professional, onSuccess }: ProfessionalFormProps) {
       </div>
 
       <div className="space-y-2">
-        <Label htmlFor="avatar">URL da Foto</Label>
-        <Input
-          id="avatar"
-          value={formData.avatar_url}
-          onChange={(e) => setFormData({ ...formData, avatar_url: e.target.value })}
-          placeholder="https://..."
-        />
-      </div>
-
-      <div className="space-y-2">
         <Label htmlFor="bio">Biografia</Label>
         <Textarea
           id="bio"
           value={formData.bio}
           onChange={(e) => setFormData({ ...formData, bio: e.target.value })}
           rows={3}
+          placeholder="Breve descrição sobre o profissional..."
         />
       </div>
 
@@ -434,7 +654,7 @@ function ProfessionalForm({ professional, onSuccess }: ProfessionalFormProps) {
         ) : professional ? (
           'Salvar Alterações'
         ) : (
-          'Cadastrar Profissional'
+          'Cadastrar Funcionário'
         )}
       </Button>
     </form>
