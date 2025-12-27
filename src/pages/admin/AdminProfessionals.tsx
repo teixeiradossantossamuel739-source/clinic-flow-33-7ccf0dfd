@@ -494,6 +494,29 @@ function ProfessionalForm({ professional, onSuccess }: ProfessionalFormProps) {
     }
   };
 
+  const createDefaultSchedules = async (professionalId: string) => {
+    // Create default schedules for Mon-Fri, 08:00-18:00
+    const defaultSchedules = [1, 2, 3, 4, 5].map((day) => ({
+      professional_id: professionalId,
+      day_of_week: day,
+      start_time: '08:00',
+      end_time: '18:00',
+      slot_duration_minutes: 30,
+      is_active: true,
+    }));
+
+    const { error } = await supabase
+      .from('professional_schedules')
+      .insert(defaultSchedules);
+
+    if (error) {
+      console.error('Error creating default schedules:', error);
+      toast.error('Erro ao criar horários padrão');
+    } else {
+      toast.success('Horários padrão criados (Seg-Sex, 08:00-18:00)');
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -508,9 +531,20 @@ function ProfessionalForm({ professional, onSuccess }: ProfessionalFormProps) {
         if (error) throw error;
         toast.success('Funcionário atualizado com sucesso');
       } else {
-        const { error } = await supabase.from('professionals').insert(formData);
+        // Insert new professional and get the ID
+        const { data: newProfessional, error } = await supabase
+          .from('professionals')
+          .insert(formData)
+          .select('id')
+          .single();
 
         if (error) throw error;
+
+        // Create default schedules for the new professional
+        if (newProfessional) {
+          await createDefaultSchedules(newProfessional.id);
+        }
+
         toast.success('Funcionário cadastrado com sucesso');
       }
 

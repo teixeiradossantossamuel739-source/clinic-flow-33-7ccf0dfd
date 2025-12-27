@@ -415,32 +415,48 @@ export default function BookingPage() {
                   {selectedService?.name} - Selecione um de nossos especialistas
                 </p>
 
-                <div className="grid sm:grid-cols-2 gap-4">
-                  {filteredProfessionals.map((professional) => (
-                    <button
-                      key={professional.id}
-                      onClick={() => handleSelectProfessional(professional.id)}
-                      className="text-left bg-background border border-clinic-border-subtle rounded-xl p-5 hover:border-clinic-primary hover:shadow-clinic-md transition-all flex gap-4"
-                    >
-                      <img
-                        src={professional.avatar_url || '/placeholder.svg'}
-                        alt={professional.name}
-                        className="h-16 w-16 rounded-xl object-cover shrink-0"
-                      />
-                      <div className="flex-1 min-w-0">
-                        <h3 className="font-semibold">{professional.name}</h3>
-                        <p className="text-sm text-clinic-text-muted">{professional.crm}</p>
-                        <div className="flex items-center gap-1 mt-1">
-                          <Star className="h-4 w-4 fill-warning text-warning" />
-                          <span className="text-sm font-medium">{professional.rating || 5.0}</span>
-                          <span className="text-sm text-clinic-text-muted">
-                            ({professional.review_count || 0})
-                          </span>
+                {filteredProfessionals.length === 0 ? (
+                  <div className="bg-background border border-clinic-border-subtle rounded-xl p-8 text-center">
+                    <div className="h-16 w-16 rounded-full bg-warning/10 flex items-center justify-center mx-auto mb-4">
+                      <Clock className="h-8 w-8 text-warning" />
+                    </div>
+                    <h3 className="font-semibold text-lg mb-2">Nenhum profissional disponível</h3>
+                    <p className="text-clinic-text-muted mb-4">
+                      No momento não há profissionais disponíveis para {selectedService?.name}.
+                    </p>
+                    <Button variant="outline" onClick={goBack}>
+                      <ArrowLeft className="h-4 w-4 mr-2" />
+                      Escolher outro serviço
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="grid sm:grid-cols-2 gap-4">
+                    {filteredProfessionals.map((professional) => (
+                      <button
+                        key={professional.id}
+                        onClick={() => handleSelectProfessional(professional.id)}
+                        className="text-left bg-background border border-clinic-border-subtle rounded-xl p-5 hover:border-clinic-primary hover:shadow-clinic-md transition-all flex gap-4"
+                      >
+                        <img
+                          src={professional.avatar_url || '/placeholder.svg'}
+                          alt={professional.name}
+                          className="h-16 w-16 rounded-xl object-cover shrink-0"
+                        />
+                        <div className="flex-1 min-w-0">
+                          <h3 className="font-semibold">{professional.name}</h3>
+                          <p className="text-sm text-clinic-text-muted">{professional.crm}</p>
+                          <div className="flex items-center gap-1 mt-1">
+                            <Star className="h-4 w-4 fill-warning text-warning" />
+                            <span className="text-sm font-medium">{professional.rating || 5.0}</span>
+                            <span className="text-sm text-clinic-text-muted">
+                              ({professional.review_count || 0})
+                            </span>
+                          </div>
                         </div>
-                      </div>
-                    </button>
-                  ))}
-                </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
 
