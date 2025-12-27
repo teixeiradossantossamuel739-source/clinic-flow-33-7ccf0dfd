@@ -20,6 +20,7 @@ const navItems = [
   { name: 'Dashboard', href: '/admin', icon: LayoutDashboard },
   { name: 'Agenda', href: '/admin/agenda', icon: Calendar },
   { name: 'Pacientes', href: '/admin/pacientes', icon: Users },
+  { name: 'Funcionários', href: '/admin/funcionarios', icon: Users },
   { name: 'Serviços', href: '/admin/servicos', icon: Stethoscope },
   { name: 'Relatórios', href: '/admin/relatorios', icon: FileText },
   { name: 'Configurações', href: '/admin/configuracoes', icon: Settings },
