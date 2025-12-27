@@ -10,6 +10,7 @@ interface TestUser {
   fullName: string;
   role: 'admin' | 'funcionario' | 'cliente';
   description: string;
+  professionalId?: string;
   icon: React.ReactNode;
 }
 
@@ -17,7 +18,7 @@ type UserStatus = 'idle' | 'loading' | 'created' | 'updated' | 'exists' | 'error
 
 const testUsers: TestUser[] = [
   {
-    email: 'admin@teste.com',
+    email: 'adm.teste@gmail.com',
     password: 'teste123',
     fullName: 'Administrador',
     role: 'admin',
@@ -25,11 +26,57 @@ const testUsers: TestUser[] = [
     icon: <Shield className="h-4 w-4" />,
   },
   {
-    email: 'funcionario@teste.com',
+    email: 'funcionariolucas@gmail.com',
     password: 'teste123',
-    fullName: 'Funcionário Teste',
+    fullName: 'Dr. Lucas Mendes',
     role: 'funcionario',
-    description: 'Acesso operacional da clínica',
+    description: 'Setor: Clínica Geral',
+    professionalId: '0147089c-d119-43fc-9132-5f9299f9d861',
+    icon: <Briefcase className="h-4 w-4" />,
+  },
+  {
+    email: 'funcionariocarlos@gmail.com',
+    password: 'teste123',
+    fullName: 'Dr. Carlos Ferreira',
+    role: 'funcionario',
+    description: 'Setor: Cardiologia',
+    professionalId: '898d6900-3e8b-4a9a-b162-69a66e9438ee',
+    icon: <Briefcase className="h-4 w-4" />,
+  },
+  {
+    email: 'funcionariomaria@gmail.com',
+    password: 'teste123',
+    fullName: 'Dra. Maria Santos',
+    role: 'funcionario',
+    description: 'Setor: Dermatologia',
+    professionalId: 'fafbb4f6-af76-47a5-b57a-f70a3bc8422a',
+    icon: <Briefcase className="h-4 w-4" />,
+  },
+  {
+    email: 'funcionariocarol@gmail.com',
+    password: 'teste123',
+    fullName: 'Dra. Carol Oliveira',
+    role: 'funcionario',
+    description: 'Setor: Pediatria',
+    professionalId: '25f74fb5-6fa7-462a-a538-7b81c76aa970',
+    icon: <Briefcase className="h-4 w-4" />,
+  },
+  {
+    email: 'funcionarioleandro@gmail.com',
+    password: 'teste123',
+    fullName: 'Dr. Leandro Silva',
+    role: 'funcionario',
+    description: 'Setor: Ortopedia',
+    professionalId: '841ef393-3a32-489b-9f34-dc24384e866a',
+    icon: <Briefcase className="h-4 w-4" />,
+  },
+  {
+    email: 'funcionariojulia@gmail.com',
+    password: 'teste123',
+    fullName: 'Dra. Julia Nascimento',
+    role: 'funcionario',
+    description: 'Setor: Oftalmologia',
+    professionalId: 'b6a03493-f586-4db7-8c34-e30cc649f9f1',
     icon: <Briefcase className="h-4 w-4" />,
   },
 ];
@@ -45,13 +92,13 @@ export default function SetupPage() {
     setErrors((prev) => ({ ...prev, [user.email]: '' }));
 
     try {
-      // Call the edge function to create/update user
       const { data, error } = await supabase.functions.invoke('create-test-user', {
         body: {
           email: user.email,
           password: user.password,
           fullName: user.fullName,
           role: user.role,
+          professionalId: user.professionalId,
         },
       });
 
@@ -86,7 +133,6 @@ export default function SetupPage() {
   const createAllUsers = async () => {
     for (const user of testUsers) {
       await createOrUpdateUser(user);
-      // Small delay between creations
       await new Promise((resolve) => setTimeout(resolve, 500));
     }
   };
@@ -122,43 +168,42 @@ export default function SetupPage() {
             </div>
             <div>
               <h1 className="text-2xl font-bold">Setup - Usuários de Teste</h1>
-              <p className="text-clinic-text-secondary">Crie os usuários administrativos para testes</p>
+              <p className="text-clinic-text-secondary">1 Admin + 6 Funcionários (Setores)</p>
             </div>
           </div>
 
           <div className="p-4 rounded-lg bg-info/10 border border-info/20 mb-6">
-            <p className="text-sm text-info font-medium mb-1">Nota sobre Clientes</p>
+            <p className="text-sm text-info font-medium mb-1">6 Setores da Clínica</p>
             <p className="text-xs text-clinic-text-secondary">
-              Clientes não precisam ser criados aqui. Eles acessam o sistema informando Nome, WhatsApp e Email, 
-              e recebem um link de acesso por email (magic link).
+              Cada funcionário representa um setor: Clínica Geral, Cardiologia, Dermatologia, Pediatria, Ortopedia e Oftalmologia.
             </p>
           </div>
 
-          <div className="space-y-4 mb-6">
+          <div className="space-y-3 mb-6 max-h-[400px] overflow-y-auto">
             {testUsers.map((user) => (
               <div
                 key={user.email}
-                className="flex items-center justify-between p-4 rounded-xl border border-clinic-border-subtle bg-clinic-surface/50"
+                className="flex items-center justify-between p-3 rounded-xl border border-clinic-border-subtle bg-clinic-surface/50"
               >
-                <div className="flex-1">
+                <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
-                    <div className="h-8 w-8 rounded-lg bg-clinic-primary/10 flex items-center justify-center text-clinic-primary">
+                    <div className="h-8 w-8 rounded-lg bg-clinic-primary/10 flex items-center justify-center text-clinic-primary shrink-0">
                       {user.icon}
                     </div>
-                    <div>
-                      <span className="font-medium">{user.fullName}</span>
-                      <span className="ml-2 text-xs px-2 py-0.5 rounded-full bg-clinic-primary/10 text-clinic-primary capitalize">
+                    <div className="min-w-0">
+                      <span className="font-medium text-sm truncate block">{user.fullName}</span>
+                      <span className="text-xs px-2 py-0.5 rounded-full bg-clinic-primary/10 text-clinic-primary capitalize">
                         {user.role}
                       </span>
                     </div>
                   </div>
-                  <p className="text-sm text-clinic-text-muted mt-1 ml-10">{user.email}</p>
-                  <p className="text-xs text-clinic-text-secondary mt-1 ml-10">{user.description}</p>
+                  <p className="text-xs text-clinic-text-muted mt-1 ml-10 truncate">{user.email}</p>
+                  <p className="text-xs text-clinic-text-secondary ml-10">{user.description}</p>
                   {errors[user.email] && (
                     <p className="text-xs text-destructive mt-1 ml-10">{errors[user.email]}</p>
                   )}
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 shrink-0">
                   {getStatusIcon(user.email)}
                   {getStatusText(user.email) && (
                     <span className="text-xs text-success">{getStatusText(user.email)}</span>
@@ -173,10 +218,7 @@ export default function SetupPage() {
                       {loading === user.email ? (
                         <Loader2 className="h-4 w-4 animate-spin" />
                       ) : status[user.email] === 'error' ? (
-                        <>
-                          <RefreshCw className="h-4 w-4 mr-1" />
-                          Tentar novamente
-                        </>
+                        <RefreshCw className="h-4 w-4" />
                       ) : (
                         'Criar'
                       )}
@@ -195,7 +237,7 @@ export default function SetupPage() {
               className="flex-1"
             >
               {loading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-              {allDone ? 'Todos os usuários criados' : 'Criar Todos os Usuários'}
+              {allDone ? 'Todos criados ✓' : 'Criar Todos'}
             </Button>
             <a href="/auth" className="flex-1">
               <Button variant="outline" className="w-full">
@@ -205,14 +247,8 @@ export default function SetupPage() {
           </div>
 
           <div className="mt-6 p-4 rounded-lg bg-warning/10 border border-warning/20">
-            <p className="text-sm text-warning font-medium mb-2">Credenciais de teste:</p>
-            <div className="text-xs text-clinic-text-secondary space-y-1">
-              {testUsers.map((user) => (
-                <p key={user.email}>
-                  <span className="font-mono">{user.email}</span> / <span className="font-mono">{user.password}</span>
-                </p>
-              ))}
-            </div>
+            <p className="text-sm text-warning font-medium mb-2">Senha para todos:</p>
+            <p className="text-xs font-mono text-clinic-text-secondary">teste123</p>
           </div>
         </div>
 

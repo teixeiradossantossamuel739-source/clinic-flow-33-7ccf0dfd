@@ -23,7 +23,7 @@ type LoginType = 'client' | 'staff';
 
 export default function AuthPage() {
   const navigate = useNavigate();
-  const { user, loading: authLoading, signIn, signUpClient } = useAuth();
+  const { user, role, loading: authLoading, signIn, signUpClient } = useAuth();
   
   const [loginType, setLoginType] = useState<LoginType>('client');
   const [loading, setLoading] = useState(false);
@@ -37,12 +37,25 @@ export default function AuthPage() {
     password: '',
   });
 
-  // Redirect if already logged in
+  // Redirect based on role if already logged in
   useEffect(() => {
     if (!authLoading && user) {
-      navigate('/');
+      // Give time for role to be fetched
+      const checkRoleAndRedirect = async () => {
+        // Wait a bit for role to be fetched
+        await new Promise(r => setTimeout(r, 200));
+        
+        if (role === 'admin') {
+          navigate('/admin');
+        } else if (role === 'funcionario') {
+          navigate('/funcionario');
+        } else {
+          navigate('/');
+        }
+      };
+      checkRoleAndRedirect();
     }
-  }, [user, authLoading, navigate]);
+  }, [user, role, authLoading, navigate]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
