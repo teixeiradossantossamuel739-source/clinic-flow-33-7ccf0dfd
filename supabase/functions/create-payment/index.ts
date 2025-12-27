@@ -1,5 +1,4 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import Stripe from "https://esm.sh/stripe@18.5.0";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 
 const corsHeaders = {
@@ -20,9 +19,9 @@ serve(async (req) => {
   try {
     logStep("Function started");
 
-    const stripeKey = Deno.env.get("STRIPE_SECRET_KEY");
-    if (!stripeKey) throw new Error("STRIPE_SECRET_KEY is not set");
-    logStep("Stripe key verified");
+    const mpAccessToken = Deno.env.get("MERCADOPAGO_ACCESS_TOKEN");
+    if (!mpAccessToken) throw new Error("MERCADOPAGO_ACCESS_TOKEN is not set");
+    logStep("Mercado Pago token verified");
 
     const supabaseClient = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
@@ -33,7 +32,6 @@ serve(async (req) => {
     const { 
       serviceName,
       servicePrice,
-      stripePriceId,
       professionalName,
       professionalId,
       appointmentDate,
@@ -46,7 +44,6 @@ serve(async (req) => {
     logStep("Request data received", { 
       serviceName, 
       servicePrice, 
-      stripePriceId,
       professionalName,
       appointmentDate,
       appointmentTime,
@@ -55,7 +52,7 @@ serve(async (req) => {
     });
 
     // Validate required fields
-    if (!stripePriceId || !patientEmail || !patientName || !appointmentDate || !appointmentTime) {
+    if (!servicePrice || !patientEmail || !patientName || !appointmentDate || !appointmentTime) {
       throw new Error("Missing required fields");
     }
 
@@ -79,18 +76,6 @@ serve(async (req) => {
     }
 
     logStep("Time slot is available");
-
-    const stripe = new Stripe(stripeKey, { apiVersion: "2025-08-27.basil" });
-
-    // Check if customer exists
-    const customers = await stripe.customers.list({ email: patientEmail, limit: 1 });
-    let customerId;
-    if (customers.data.length > 0) {
-      customerId = customers.data[0].id;
-      logStep("Existing customer found", { customerId });
-    } else {
-      logStep("No existing customer, will create with email", { email: patientEmail });
-    }
 
     // Create appointment record first
     const { data: appointment, error: appointmentError } = await supabaseClient
@@ -119,38 +104,67 @@ serve(async (req) => {
 
     const origin = req.headers.get("origin") || "http://localhost:5173";
 
-    // Create checkout session
-    const session = await stripe.checkout.sessions.create({
-      customer: customerId,
-      customer_email: customerId ? undefined : patientEmail,
-      line_items: [
+    // Create Mercado Pago preference
+    const preferenceData = {
+      items: [
         {
-          price: stripePriceId,
+          title: serviceName || "Consulta",
+          description: `Consulta com ${professionalName} em ${appointmentDate} às ${appointmentTime}`,
           quantity: 1,
+          currency_id: "BRL",
+          unit_price: servicePrice / 100, // Convert from cents to reais
         },
       ],
-      mode: "payment",
-      success_url: `${origin}/agendamento-sucesso?appointment_id=${appointment.id}&session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${origin}/agendar?canceled=true`,
-      metadata: {
-        appointment_id: appointment.id,
-        professional_name: professionalName,
-        appointment_date: appointmentDate,
-        appointment_time: appointmentTime,
-        patient_name: patientName
-      }
+      payer: {
+        name: patientName,
+        email: patientEmail,
+        phone: patientPhone ? {
+          number: patientPhone.replace(/\D/g, ''),
+        } : undefined,
+      },
+      back_urls: {
+        success: `${origin}/agendamento-sucesso?appointment_id=${appointment.id}`,
+        failure: `${origin}/agendar?canceled=true`,
+        pending: `${origin}/agendamento-sucesso?appointment_id=${appointment.id}&pending=true`,
+      },
+      auto_return: "approved",
+      external_reference: appointment.id,
+      notification_url: `${Deno.env.get("SUPABASE_URL")}/functions/v1/mercadopago-webhook`,
+      payment_methods: {
+        excluded_payment_types: [],
+        installments: 1,
+      },
+      statement_descriptor: "CONSULTA SAUDE",
+    };
+
+    logStep("Creating Mercado Pago preference", { preferenceData });
+
+    const mpResponse = await fetch("https://api.mercadopago.com/checkout/preferences", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${mpAccessToken}`,
+      },
+      body: JSON.stringify(preferenceData),
     });
 
-    logStep("Checkout session created", { sessionId: session.id, url: session.url });
+    if (!mpResponse.ok) {
+      const errorData = await mpResponse.text();
+      logStep("Mercado Pago error", { status: mpResponse.status, error: errorData });
+      throw new Error(`Mercado Pago error: ${errorData}`);
+    }
 
-    // Update appointment with session ID
+    const preference = await mpResponse.json();
+    logStep("Mercado Pago preference created", { preferenceId: preference.id, initPoint: preference.init_point });
+
+    // Update appointment with preference ID
     await supabaseClient
       .from('appointments')
-      .update({ stripe_session_id: session.id })
+      .update({ stripe_session_id: preference.id }) // Reusing stripe_session_id field for MP preference ID
       .eq('id', appointment.id);
 
     return new Response(JSON.stringify({ 
-      url: session.url,
+      url: preference.init_point,
       appointmentId: appointment.id 
     }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
