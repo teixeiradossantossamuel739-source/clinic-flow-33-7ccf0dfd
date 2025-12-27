@@ -3,6 +3,7 @@ import { useSearchParams, Link } from 'react-router-dom';
 import { PublicLayout } from '@/components/layout/PublicLayout';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
+import { parseLocalDate } from '@/lib/dateUtils';
 import { CheckCircle2, Calendar, Clock, User, Loader2, Home, Phone } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
@@ -137,7 +138,7 @@ export default function BookingSuccessPage() {
                   <div>
                     <p className="text-sm text-clinic-text-muted">Data</p>
                     <p className="font-medium">
-                      {format(new Date(appointment.appointment_date), "EEEE, dd 'de' MMMM 'de' yyyy", { locale: ptBR })}
+                      {format(parseLocalDate(appointment.appointment_date), "EEEE, dd 'de' MMMM 'de' yyyy", { locale: ptBR })}
                     </p>
                   </div>
                 </div>

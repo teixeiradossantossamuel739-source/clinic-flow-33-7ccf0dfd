@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { PublicLayout } from '@/components/layout/PublicLayout';
 import { supabase } from '@/integrations/supabase/client';
+import { parseLocalDate } from '@/lib/dateUtils';
 import { 
   Calendar, 
   Clock, 
@@ -24,7 +25,7 @@ import {
   Brain,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { format, addDays, startOfWeek, getDay, startOfDay, isToday } from 'date-fns';
+import { format, addDays, startOfWeek, getDay, startOfDay, isToday, isSameDay } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
 interface Service {
@@ -201,7 +202,8 @@ export default function BookingPage() {
   const timeSlots = useMemo(() => {
     if (!booking.date || !booking.professionalId) return [];
     
-    const selectedDate = new Date(booking.date);
+    // Use parseLocalDate to avoid UTC timezone issues (e.g., Brazil UTC-3 shifting day)
+    const selectedDate = parseLocalDate(booking.date);
     const dayOfWeek = getDay(selectedDate);
     const schedule = professionalSchedules.find((s) => s.day_of_week === dayOfWeek);
     
@@ -224,8 +226,8 @@ export default function BookingPage() {
       .map((apt) => apt.appointment_time.slice(0, 5)); // Get HH:MM format
 
     // Check if selected date is today to filter past time slots
-    const isTodayDate = isToday(selectedDate);
     const now = new Date();
+    const isTodayDate = isSameDay(selectedDate, now);
     const currentMinutes = now.getHours() * 60 + now.getMinutes();
     // Add 30 min buffer for same-day bookings
     const minAllowedMinutes = currentMinutes + 30;
@@ -612,7 +614,7 @@ export default function BookingPage() {
                           <Calendar className="h-4 w-4 text-clinic-primary" />
                           <span>
                             {booking.date &&
-                              format(new Date(booking.date), "EEEE, dd 'de' MMMM 'de' yyyy", {
+                              format(parseLocalDate(booking.date), "EEEE, dd 'de' MMMM 'de' yyyy", {
                                 locale: ptBR,
                               })}
                           </span>
