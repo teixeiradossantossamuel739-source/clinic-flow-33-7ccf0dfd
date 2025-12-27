@@ -149,6 +149,7 @@ export type Database = {
           review_count: number | null
           specialty_id: string
           updated_at: string
+          user_id: string | null
         }
         Insert: {
           avatar_url?: string | null
@@ -165,6 +166,7 @@ export type Database = {
           review_count?: number | null
           specialty_id: string
           updated_at?: string
+          user_id?: string | null
         }
         Update: {
           avatar_url?: string | null
@@ -181,6 +183,7 @@ export type Database = {
           review_count?: number | null
           specialty_id?: string
           updated_at?: string
+          user_id?: string | null
         }
         Relationships: []
       }
