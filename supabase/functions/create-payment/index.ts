@@ -119,11 +119,10 @@ serve(async (req) => {
 
     const origin = req.headers.get("origin") || "http://localhost:5173";
 
-    // Create checkout session with Pix and Card support
+    // Create checkout session
     const session = await stripe.checkout.sessions.create({
       customer: customerId,
       customer_email: customerId ? undefined : patientEmail,
-      payment_method_types: ['card', 'pix'],
       line_items: [
         {
           price: stripePriceId,
@@ -133,7 +132,6 @@ serve(async (req) => {
       mode: "payment",
       success_url: `${origin}/agendamento-sucesso?appointment_id=${appointment.id}&session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${origin}/agendar?canceled=true`,
-      expires_at: Math.floor(Date.now() / 1000) + (60 * 30), // Session expires in 30 minutes
       metadata: {
         appointment_id: appointment.id,
         professional_name: professionalName,
