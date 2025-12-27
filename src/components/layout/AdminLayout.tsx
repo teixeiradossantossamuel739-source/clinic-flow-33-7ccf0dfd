@@ -14,16 +14,18 @@ import {
   Bell,
   Search,
 } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
+import { useAuth } from '@/contexts/AuthContext';
 
-const navItems = [
-  { name: 'Dashboard', href: '/admin', icon: LayoutDashboard },
-  { name: 'Agenda', href: '/admin/agenda', icon: Calendar },
-  { name: 'Pacientes', href: '/admin/pacientes', icon: Users },
-  { name: 'Funcionários', href: '/admin/funcionarios', icon: Users },
-  { name: 'Serviços', href: '/admin/servicos', icon: Stethoscope },
-  { name: 'Relatórios', href: '/admin/relatorios', icon: FileText },
-  { name: 'Configurações', href: '/admin/configuracoes', icon: Settings },
+// Define nav items with optional adminOnly flag
+const allNavItems = [
+  { name: 'Dashboard', href: '/admin', icon: LayoutDashboard, adminOnly: false },
+  { name: 'Agenda', href: '/admin/agenda', icon: Calendar, adminOnly: false },
+  { name: 'Pacientes', href: '/admin/pacientes', icon: Users, adminOnly: false },
+  { name: 'Funcionários', href: '/admin/funcionarios', icon: Users, adminOnly: true },
+  { name: 'Serviços', href: '/admin/servicos', icon: Stethoscope, adminOnly: true },
+  { name: 'Relatórios', href: '/admin/relatorios', icon: FileText, adminOnly: true },
+  { name: 'Configurações', href: '/admin/configuracoes', icon: Settings, adminOnly: true },
 ];
 
 interface AdminLayoutProps {
@@ -34,6 +36,21 @@ export function AdminLayout({ children }: AdminLayoutProps) {
   const location = useLocation();
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const { role, profile } = useAuth();
+  
+  // Filter nav items based on user role
+  const navItems = useMemo(() => {
+    if (role === 'admin') {
+      return allNavItems;
+    }
+    // For funcionario, hide admin-only items
+    return allNavItems.filter(item => !item.adminOnly);
+  }, [role]);
+
+  // Get display name and initials
+  const displayName = profile?.full_name || 'Usuário';
+  const roleLabel = role === 'admin' ? 'Administrador' : 'Funcionário';
+  const initials = displayName.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
 
   return (
     <div className="min-h-screen flex bg-clinic-surface">
@@ -168,11 +185,11 @@ export function AdminLayout({ children }: AdminLayoutProps) {
 
             <div className="flex items-center gap-3">
               <div className="hidden sm:block text-right">
-                <p className="text-sm font-medium">Dr. Admin</p>
-                <p className="text-xs text-clinic-text-muted">Administrador</p>
+                <p className="text-sm font-medium">{displayName}</p>
+                <p className="text-xs text-clinic-text-muted">{roleLabel}</p>
               </div>
               <div className="h-9 w-9 rounded-xl bg-clinic-primary flex items-center justify-center text-foreground font-medium">
-                A
+                {initials}
               </div>
             </div>
           </div>
