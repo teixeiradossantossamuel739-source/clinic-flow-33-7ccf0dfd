@@ -151,7 +151,28 @@ serve(async (req) => {
     if (!mpResponse.ok) {
       const errorData = await mpResponse.text();
       logStep("Mercado Pago error", { status: mpResponse.status, error: errorData });
-      throw new Error(`Mercado Pago error: ${errorData}`);
+
+      // IMPORTANT: do not keep the slot blocked when payment provider rejects the preference.
+      // Mark as cancelled/failed so it won't be considered a valid reservation.
+      try {
+        await supabaseClient
+          .from('appointments')
+          .update({
+            status: 'cancelled',
+            payment_status: 'failed',
+            notes: `Mercado Pago error (${mpResponse.status}): ${errorData}`.slice(0, 1000),
+          })
+          .eq('id', appointment.id);
+      } catch (cleanupErr) {
+        logStep("Failed to cancel appointment after MP error", { cleanupErr });
+      }
+
+      // Surface a clearer message for the frontend
+      throw new Error(
+        mpResponse.status === 403
+          ? "Pagamento bloqueado pelo Mercado Pago (políticas). Verifique se seu Access Token é de PRODUÇÃO e se a conta está habilitada para receber pagamentos."
+          : `Mercado Pago error: ${errorData}`
+      );
     }
 
     const preference = await mpResponse.json();
