@@ -4,7 +4,7 @@ import { PublicLayout } from '@/components/layout/PublicLayout';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
 import { parseLocalDate } from '@/lib/dateUtils';
-import { CheckCircle2, Calendar, Clock, User, Loader2, Home, Phone } from 'lucide-react';
+import { CheckCircle2, Calendar, Clock, User, Loader2, Home, MessageCircle, Send } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -30,6 +30,8 @@ export default function BookingSuccessPage() {
   const [loading, setLoading] = useState(true);
   const [appointment, setAppointment] = useState<AppointmentDetails | null>(null);
   const [verified, setVerified] = useState(false);
+  const [whatsappLink, setWhatsappLink] = useState<string | null>(null);
+  const [notificationSent, setNotificationSent] = useState(false);
 
   useEffect(() => {
     async function verifyPayment() {
@@ -48,6 +50,11 @@ export default function BookingSuccessPage() {
         if (data?.paid && data?.appointment) {
           setAppointment(data.appointment);
           setVerified(true);
+          
+          if (data?.whatsappLink) {
+            setWhatsappLink(data.whatsappLink);
+          }
+          
           toast.success('Pagamento confirmado! Seu agendamento está garantido.');
         } else {
           toast.error('Pagamento ainda não confirmado. Verifique em alguns minutos.');
@@ -62,6 +69,14 @@ export default function BookingSuccessPage() {
 
     verifyPayment();
   }, [sessionId, appointmentId]);
+
+  const handleSendWhatsApp = () => {
+    if (whatsappLink) {
+      window.open(whatsappLink, '_blank');
+      setNotificationSent(true);
+      toast.success('WhatsApp aberto! Envie a mensagem para notificar o profissional.');
+    }
+  };
 
   if (loading) {
     return (
@@ -115,6 +130,34 @@ export default function BookingSuccessPage() {
                 Seu pagamento foi processado com sucesso. Veja os detalhes abaixo.
               </p>
             </div>
+
+            {/* WhatsApp Notification Card */}
+            {whatsappLink && !notificationSent && (
+              <div className="bg-green-50 border border-green-200 rounded-xl p-6 mb-6">
+                <div className="flex items-start gap-4">
+                  <div className="h-12 w-12 rounded-full bg-green-500 flex items-center justify-center shrink-0">
+                    <MessageCircle className="h-6 w-6 text-white" />
+                  </div>
+                  <div className="flex-1">
+                    <h3 className="font-semibold text-green-800 mb-1">Notificar o Profissional</h3>
+                    <p className="text-sm text-green-700 mb-3">
+                      Clique no botão abaixo para enviar uma notificação via WhatsApp para o profissional sobre seu agendamento.
+                    </p>
+                    <Button onClick={handleSendWhatsApp} className="bg-green-600 hover:bg-green-700">
+                      <Send className="h-4 w-4 mr-2" />
+                      Enviar WhatsApp para o Profissional
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {notificationSent && (
+              <div className="bg-green-50 border border-green-200 rounded-xl p-4 mb-6 flex items-center gap-3">
+                <CheckCircle2 className="h-5 w-5 text-green-600" />
+                <span className="text-green-700">Notificação de WhatsApp enviada!</span>
+              </div>
+            )}
 
             {/* Appointment Details Card */}
             <div className="bg-background border border-clinic-border-subtle rounded-xl p-6 mb-6">
@@ -174,23 +217,17 @@ export default function BookingSuccessPage() {
                 </li>
                 <li className="flex items-start gap-2">
                   <CheckCircle2 className="h-4 w-4 text-clinic-primary mt-0.5 shrink-0" />
-                  <span>Chegue 15 minutos antes do horário marcado</span>
+                  <span>O profissional será notificado sobre seu agendamento</span>
                 </li>
                 <li className="flex items-start gap-2">
                   <CheckCircle2 className="h-4 w-4 text-clinic-primary mt-0.5 shrink-0" />
-                  <span>Traga um documento com foto e carteirinha do convênio (se aplicável)</span>
+                  <span>Chegue 15 minutos antes do horário marcado</span>
                 </li>
               </ul>
             </div>
 
             {/* Actions */}
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
-              <Button asChild variant="clinic" size="lg">
-                <a href="https://wa.me/5511999999999" target="_blank" rel="noopener noreferrer">
-                  <Phone className="h-4 w-4" />
-                  Falar com a Clínica
-                </a>
-              </Button>
               <Button asChild variant="outline" size="lg">
                 <Link to="/">
                   <Home className="h-4 w-4" />

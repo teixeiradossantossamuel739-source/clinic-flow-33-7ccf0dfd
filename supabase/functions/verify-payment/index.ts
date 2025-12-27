@@ -12,6 +12,24 @@ const logStep = (step: string, details?: any) => {
   console.log(`[VERIFY-PAYMENT] ${step}${detailsStr}`);
 };
 
+// Format phone number to international format
+function formatPhone(phone: string): string {
+  const digits = phone.replace(/\D/g, '');
+  if (digits.startsWith('55') && digits.length >= 12) {
+    return digits;
+  }
+  if (digits.length === 11 || digits.length === 10) {
+    return `55${digits}`;
+  }
+  return digits;
+}
+
+// Format date to Brazilian format
+function formatDate(dateStr: string): string {
+  const [year, month, day] = dateStr.split('-');
+  return `${day}/${month}/${year}`;
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -63,17 +81,53 @@ serve(async (req) => {
 
       logStep("Appointment updated to paid");
 
-      // Get appointment details
+      // Get appointment details with professional info
       const { data: appointment } = await supabaseClient
         .from('appointments')
         .select('*')
         .eq('id', appointmentId)
         .single();
 
+      // Get professional phone number
+      let professionalPhone = null;
+      let whatsappLink = null;
+      
+      if (appointment?.professional_uuid) {
+        const { data: professional } = await supabaseClient
+          .from('professionals')
+          .select('phone, name')
+          .eq('id', appointment.professional_uuid)
+          .single();
+        
+        if (professional?.phone) {
+          professionalPhone = professional.phone;
+          
+          // Generate WhatsApp message for professional
+          const formattedDate = formatDate(appointment.appointment_date);
+          const message = `🔔 *Novo Agendamento Confirmado!*
+
+📋 *Paciente:* ${appointment.patient_name}
+📱 *WhatsApp:* ${appointment.patient_phone || 'Não informado'}
+📧 *Email:* ${appointment.patient_email}
+📅 *Data:* ${formattedDate}
+⏰ *Horário:* ${appointment.appointment_time}
+💰 *Valor:* R$ ${(appointment.amount_cents / 100).toFixed(2)}
+
+✅ Pagamento confirmado via Stripe.`;
+
+          const formattedPhone = formatPhone(professionalPhone);
+          whatsappLink = `https://wa.me/${formattedPhone}?text=${encodeURIComponent(message)}`;
+          
+          logStep("WhatsApp link generated for professional", { professionalName: professional.name });
+        }
+      }
+
       return new Response(JSON.stringify({ 
         success: true,
         paid: true,
-        appointment
+        appointment,
+        whatsappLink,
+        professionalPhone
       }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
         status: 200,

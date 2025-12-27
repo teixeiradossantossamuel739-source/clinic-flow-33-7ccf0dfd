@@ -13,7 +13,8 @@ import {
   CheckCircle2, 
   XCircle, 
   TrendingUp,
-  Users
+  Users,
+  MessageCircle
 } from 'lucide-react';
 import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, isToday, isTomorrow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -151,8 +152,26 @@ export default function FuncionarioDashboard() {
       console.error('Error completing appointment:', error);
       toast.error('Erro ao atualizar consulta');
     } finally {
-      setProcessing(null);
+    setProcessing(null);
     }
+  };
+
+  // Format phone number and generate WhatsApp link
+  const generateWhatsAppLink = (phone: string, patientName: string, dateStr: string, time: string) => {
+    const digits = phone.replace(/\D/g, '');
+    const formattedPhone = digits.startsWith('55') ? digits : `55${digits}`;
+    const [year, month, day] = dateStr.split('-');
+    const formattedDate = `${day}/${month}/${year}`;
+    
+    const message = `Olá ${patientName}! 👋
+
+Confirmamos sua consulta:
+📅 Data: ${formattedDate}
+⏰ Horário: ${time}
+
+Aguardamos você!`;
+
+    return `https://wa.me/${formattedPhone}?text=${encodeURIComponent(message)}`;
   };
 
   // Calculate statistics
@@ -479,10 +498,26 @@ export default function FuncionarioDashboard() {
                         </p>
                       </div>
                     </div>
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-2">
                       <Badge className="bg-green-500/10 text-green-600 border-green-500/20">
                         Confirmada
                       </Badge>
+                      {apt.patient_phone && (
+                        <Button 
+                          size="sm" 
+                          variant="outline"
+                          asChild
+                          className="text-green-600 border-green-200 hover:bg-green-50"
+                        >
+                          <a 
+                            href={generateWhatsAppLink(apt.patient_phone, apt.patient_name, apt.appointment_date, apt.appointment_time.slice(0, 5))} 
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                          >
+                            <MessageCircle className="h-4 w-4" />
+                          </a>
+                        </Button>
+                      )}
                       <Button 
                         size="sm" 
                         variant="outline"
