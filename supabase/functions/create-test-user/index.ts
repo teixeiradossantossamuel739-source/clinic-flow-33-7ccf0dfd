@@ -11,6 +11,12 @@ interface CreateUserRequest {
   password: string;
   fullName: string;
   role: 'admin' | 'funcionario' | 'cliente';
+  professionalId?: string;
+  whatsapp?: string;
+}
+
+interface BulkCreateRequest {
+  users: CreateUserRequest[];
 }
 
 const logStep = (step: string, details?: any) => {
@@ -32,98 +38,139 @@ serve(async (req) => {
       { auth: { persistSession: false } }
     );
 
-    const { email, password, fullName, role }: CreateUserRequest = await req.json();
+    const body = await req.json();
+    
+    // Check if bulk creation or single user
+    const users: CreateUserRequest[] = body.users ? body.users : [body];
+    const results: any[] = [];
 
-    logStep("Processing user", { email, fullName, role });
+    for (const userData of users) {
+      const { email, password, fullName, role, professionalId, whatsapp } = userData;
 
-    // Check if user already exists
-    const { data: existingUsers } = await supabaseAdmin.auth.admin.listUsers();
-    const existingUser = existingUsers?.users?.find(u => u.email === email);
+      logStep("Processing user", { email, fullName, role, professionalId });
 
-    if (existingUser) {
-      logStep("User already exists, updating password and role", { email, userId: existingUser.id });
-      
-      // Update password
-      const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(
-        existingUser.id,
-        { 
-          password,
-          user_metadata: { full_name: fullName }
+      try {
+        // Check if user already exists
+        const { data: existingUsers } = await supabaseAdmin.auth.admin.listUsers();
+        const existingUser = existingUsers?.users?.find(u => u.email === email);
+
+        let userId: string;
+
+        if (existingUser) {
+          userId = existingUser.id;
+          logStep("User already exists, updating password and role", { email, userId });
+          
+          // Update password
+          const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(
+            existingUser.id,
+            { 
+              password,
+              user_metadata: { full_name: fullName, whatsapp }
+            }
+          );
+
+          if (updateError) {
+            logStep("Error updating user password", { error: updateError.message });
+            throw updateError;
+          }
+
+          // Update role in user_roles table (upsert)
+          const { error: roleError } = await supabaseAdmin
+            .from('user_roles')
+            .upsert(
+              { user_id: existingUser.id, role },
+              { onConflict: 'user_id' }
+            );
+
+          if (roleError) {
+            logStep("Error updating user role", { error: roleError.message });
+            throw roleError;
+          }
+
+          // Update profile with whatsapp
+          if (whatsapp) {
+            await supabaseAdmin
+              .from('profiles')
+              .update({ whatsapp, full_name: fullName })
+              .eq('user_id', existingUser.id);
+          }
+
+          results.push({ email, status: 'updated', userId });
+        } else {
+          // Create the user
+          const { data: newUser, error: createError } = await supabaseAdmin.auth.admin.createUser({
+            email,
+            password,
+            email_confirm: true,
+            user_metadata: {
+              full_name: fullName,
+              whatsapp,
+            },
+          });
+
+          if (createError) {
+            logStep("Error creating user", { error: createError.message });
+            throw createError;
+          }
+
+          userId = newUser.user!.id;
+          logStep("User created in auth", { userId, email });
+
+          // Wait a moment for the trigger to complete
+          await new Promise(resolve => setTimeout(resolve, 200));
+
+          // Update role if not cliente
+          if (role !== 'cliente') {
+            const { error: roleError } = await supabaseAdmin
+              .from('user_roles')
+              .update({ role })
+              .eq('user_id', userId);
+
+            if (roleError) {
+              logStep("Error setting user role", { error: roleError.message });
+            } else {
+              logStep("User role updated", { userId, role });
+            }
+          }
+
+          // Update profile with whatsapp
+          if (whatsapp) {
+            await supabaseAdmin
+              .from('profiles')
+              .update({ whatsapp, full_name: fullName })
+              .eq('user_id', userId);
+          }
+
+          results.push({ email, status: 'created', userId });
         }
-      );
 
-      if (updateError) {
-        logStep("Error updating user password", { error: updateError.message });
-        throw updateError;
-      }
+        // Link professional to user if professionalId is provided
+        if (professionalId && role === 'funcionario') {
+          const { error: linkError } = await supabaseAdmin
+            .from('professionals')
+            .update({ user_id: userId })
+            .eq('id', professionalId);
 
-      // Update role in user_roles table (upsert)
-      const { error: roleError } = await supabaseAdmin
-        .from('user_roles')
-        .upsert(
-          { user_id: existingUser.id, role },
-          { onConflict: 'user_id' }
-        );
+          if (linkError) {
+            logStep("Error linking professional to user", { error: linkError.message });
+          } else {
+            logStep("Professional linked to user", { professionalId, userId });
+          }
+        }
 
-      if (roleError) {
-        logStep("Error updating user role", { error: roleError.message });
-        throw roleError;
-      }
-
-      logStep("User updated successfully", { userId: existingUser.id, email });
-
-      return new Response(
-        JSON.stringify({ 
-          message: "User already exists", 
-          updated: true,
-          user: { id: existingUser.id, email } 
-        }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 }
-      );
-    }
-
-    // Create the user
-    const { data: newUser, error: createError } = await supabaseAdmin.auth.admin.createUser({
-      email,
-      password,
-      email_confirm: true,
-      user_metadata: {
-        full_name: fullName,
-      },
-    });
-
-    if (createError) {
-      logStep("Error creating user", { error: createError.message });
-      throw createError;
-    }
-
-    logStep("User created in auth", { userId: newUser.user?.id, email });
-
-    // The trigger will create the profile and default 'cliente' role
-    // Now we need to update the role to the correct one if not cliente
-    if (role !== 'cliente' && newUser.user?.id) {
-      // Wait a moment for the trigger to complete
-      await new Promise(resolve => setTimeout(resolve, 100));
-
-      const { error: roleError } = await supabaseAdmin
-        .from('user_roles')
-        .update({ role })
-        .eq('user_id', newUser.user.id);
-
-      if (roleError) {
-        logStep("Error setting user role", { error: roleError.message });
-        // Don't throw, user was created, just log the error
-      } else {
-        logStep("User role updated", { userId: newUser.user.id, role });
+      } catch (userError) {
+        const errorMessage = userError instanceof Error ? userError.message : String(userError);
+        logStep("Error processing user", { email, error: errorMessage });
+        results.push({ email, status: 'error', error: errorMessage });
       }
     }
 
-    logStep("User created successfully", { userId: newUser.user?.id, email, role });
+    logStep("All users processed", { total: results.length });
 
     return new Response(
       JSON.stringify({ 
-        message: "User created successfully", 
-        user: { id: newUser.user?.id, email } 
+        message: "Users processed successfully", 
+        results 
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 }
     );
