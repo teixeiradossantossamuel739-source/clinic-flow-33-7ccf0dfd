@@ -5,8 +5,12 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import { Loader2, QrCode, Copy, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Loader2, QrCode, Copy, CheckCircle2 } from 'lucide-react';
 import { z } from 'zod';
+import pixQrCodeImage from '@/assets/pix-qrcode.png';
+
+// Static PIX code
+const STATIC_PIX_CODE = '00020126360014BR.GOV.BCB.PIX0114+55479978875565204000053039865802BR5925SAMUEL TEIXEIRA DOS SANTO6006ITAJAI622605224Qdm4PMbsORmpsfLhSq9X863043754';
 
 const paymentFormSchema = z.object({
   name: z.string().min(3, 'Nome deve ter pelo menos 3 caracteres').max(100),
@@ -30,10 +34,7 @@ interface PaymentModalProps {
   onSuccess: (appointmentId: string) => void;
 }
 
-interface PixData {
-  qrCode: string;
-  copyPaste: string;
-  expiresAt: string;
+interface AppointmentData {
   appointmentId: string;
 }
 
@@ -46,7 +47,8 @@ export function PaymentModal({ open, onOpenChange, bookingData, onSuccess }: Pay
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
-  const [pixData, setPixData] = useState<PixData | null>(null);
+  const [appointmentData, setAppointmentData] = useState<AppointmentData | null>(null);
+  const [showPixScreen, setShowPixScreen] = useState(false);
   const [copied, setCopied] = useState(false);
   const [checkingPayment, setCheckingPayment] = useState(false);
 
@@ -102,45 +104,34 @@ export function PaymentModal({ open, onOpenChange, bookingData, onSuccess }: Pay
     setErrors({});
 
     try {
-      const { data, error } = await supabase.functions.invoke('create-pix-payment', {
-        body: {
-          serviceId: bookingData.serviceId,
-          serviceName: bookingData.serviceName,
-          servicePrice: bookingData.servicePrice,
-          professionalId: bookingData.professionalId,
-          professionalName: bookingData.professionalName,
-          appointmentDate: bookingData.appointmentDate,
-          appointmentTime: bookingData.appointmentTime,
-          patientName: formData.name,
-          patientEmail: formData.email,
-          patientPhone: formData.phone.replace(/\D/g, ''),
-          patientCpf: formData.cpf.replace(/\D/g, ''),
-        },
-      });
+      // Create appointment in pending status
+      const { data, error } = await supabase
+        .from('appointments')
+        .insert({
+          service_id: bookingData.serviceId,
+          professional_id: bookingData.professionalId,
+          professional_uuid: bookingData.professionalId,
+          appointment_date: bookingData.appointmentDate,
+          appointment_time: bookingData.appointmentTime,
+          patient_name: formData.name,
+          patient_email: formData.email,
+          patient_phone: formData.phone.replace(/\D/g, ''),
+          amount_cents: bookingData.servicePrice,
+          status: 'pending',
+          payment_status: 'pending',
+          notes: `CPF: ${formData.cpf}`,
+        })
+        .select()
+        .single();
 
       if (error) throw error;
 
-      if (data?.pixQrCode || data?.pixCopyPaste || data?.url) {
-        setPixData({
-          qrCode: data.pixQrCode || '',
-          copyPaste: data.pixCopyPaste || '',
-          expiresAt: data.expiresAt || '',
-          appointmentId: data.appointmentId,
-        });
-
-        // If there's a URL and no QR code data, redirect to payment page
-        if (data.url && !data.pixQrCode && !data.pixCopyPaste) {
-          window.location.href = data.url;
-          return;
-        }
-
-        toast.success('QR Code PIX gerado com sucesso!');
-      } else {
-        throw new Error('Dados do PIX não retornados');
-      }
+      setAppointmentData({ appointmentId: data.id });
+      setShowPixScreen(true);
+      toast.success('Agendamento criado! Realize o pagamento via PIX.');
     } catch (err) {
-      console.error('Payment error:', err);
-      const message = err instanceof Error ? err.message : 'Erro ao gerar QR Code';
+      console.error('Error creating appointment:', err);
+      const message = err instanceof Error ? err.message : 'Erro ao criar agendamento';
       toast.error(message);
     } finally {
       setLoading(false);
@@ -148,10 +139,8 @@ export function PaymentModal({ open, onOpenChange, bookingData, onSuccess }: Pay
   };
 
   const handleCopyPix = async () => {
-    if (!pixData?.copyPaste) return;
-    
     try {
-      await navigator.clipboard.writeText(pixData.copyPaste);
+      await navigator.clipboard.writeText(STATIC_PIX_CODE);
       setCopied(true);
       toast.success('Código PIX copiado!');
       setTimeout(() => setCopied(false), 3000);
@@ -161,21 +150,21 @@ export function PaymentModal({ open, onOpenChange, bookingData, onSuccess }: Pay
   };
 
   const handleCheckPayment = async () => {
-    if (!pixData?.appointmentId) return;
+    if (!appointmentData?.appointmentId) return;
 
     setCheckingPayment(true);
     try {
       const { data, error } = await supabase
         .from('appointments')
         .select('status, payment_status')
-        .eq('id', pixData.appointmentId)
+        .eq('id', appointmentData.appointmentId)
         .single();
 
       if (error) throw error;
 
       if (data?.payment_status === 'paid' || data?.status === 'confirmed') {
         toast.success('Pagamento confirmado!');
-        onSuccess(pixData.appointmentId);
+        onSuccess(appointmentData.appointmentId);
       } else {
         toast.info('Pagamento ainda não confirmado. Aguarde alguns instantes.');
       }
@@ -190,7 +179,8 @@ export function PaymentModal({ open, onOpenChange, bookingData, onSuccess }: Pay
   const handleClose = () => {
     setFormData({ name: '', phone: '', email: '', cpf: '' });
     setErrors({});
-    setPixData(null);
+    setAppointmentData(null);
+    setShowPixScreen(false);
     setCopied(false);
     onOpenChange(false);
   };
@@ -200,11 +190,11 @@ export function PaymentModal({ open, onOpenChange, bookingData, onSuccess }: Pay
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>
-            {pixData ? 'Pague com PIX' : 'Dados para Pagamento'}
+            {showPixScreen ? 'Pague com PIX' : 'Dados para Pagamento'}
           </DialogTitle>
         </DialogHeader>
 
-        {!pixData ? (
+        {!showPixScreen ? (
           <div className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="modal-name">Nome Completo *</Label>
@@ -275,7 +265,7 @@ export function PaymentModal({ open, onOpenChange, bookingData, onSuccess }: Pay
               {loading ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                  Gerando QR Code...
+                  Processando...
                 </>
               ) : (
                 <>
@@ -287,50 +277,47 @@ export function PaymentModal({ open, onOpenChange, bookingData, onSuccess }: Pay
           </div>
         ) : (
           <div className="space-y-4">
-            {pixData.qrCode ? (
-              <div className="flex justify-center">
-                <img
-                  src={`data:image/png;base64,${pixData.qrCode}`}
-                  alt="QR Code PIX"
-                  className="w-48 h-48 rounded-lg border"
-                />
-              </div>
-            ) : (
-              <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
-                <AlertCircle className="h-12 w-12 mb-2" />
-                <p className="text-center text-sm">
-                  Use o código abaixo para pagar
-                </p>
-              </div>
-            )}
+            <div className="flex justify-center">
+              <img
+                src={pixQrCodeImage}
+                alt="QR Code PIX"
+                className="w-56 h-56 rounded-lg"
+              />
+            </div>
 
-            {pixData.copyPaste && (
-              <div className="space-y-2">
-                <Label>Código PIX Copia e Cola</Label>
-                <div className="flex gap-2">
-                  <Input
-                    value={pixData.copyPaste}
-                    readOnly
-                    className="font-mono text-xs"
-                  />
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    onClick={handleCopyPix}
-                    className="shrink-0"
-                  >
-                    {copied ? (
-                      <CheckCircle2 className="h-4 w-4 text-green-500" />
-                    ) : (
-                      <Copy className="h-4 w-4" />
-                    )}
-                  </Button>
-                </div>
+            <div className="text-center">
+              <p className="font-bold text-lg">SAMUEL TEIXEIRA DOS SANTOS</p>
+              <p className="text-muted-foreground">+55 (47) 99788-7556</p>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Código PIX Copia e Cola</Label>
+              <div className="flex gap-2">
+                <Input
+                  value={STATIC_PIX_CODE}
+                  readOnly
+                  className="font-mono text-xs"
+                />
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={handleCopyPix}
+                  className="shrink-0"
+                >
+                  {copied ? (
+                    <CheckCircle2 className="h-4 w-4 text-green-500" />
+                  ) : (
+                    <Copy className="h-4 w-4" />
+                  )}
+                </Button>
               </div>
-            )}
+            </div>
 
             <div className="bg-muted/50 rounded-lg p-3 text-sm text-center">
-              <p className="text-muted-foreground">
+              <p className="font-medium text-primary">
+                Valor: R$ {(bookingData.servicePrice / 100).toFixed(2)}
+              </p>
+              <p className="text-muted-foreground mt-1">
                 Após realizar o pagamento, clique no botão abaixo para confirmar
               </p>
             </div>
@@ -357,7 +344,7 @@ export function PaymentModal({ open, onOpenChange, bookingData, onSuccess }: Pay
             <Button
               variant="ghost"
               className="w-full"
-              onClick={() => setPixData(null)}
+              onClick={() => setShowPixScreen(false)}
             >
               Voltar
             </Button>
