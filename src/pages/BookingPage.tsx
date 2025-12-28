@@ -1,11 +1,12 @@
 import { useState, useMemo, useEffect } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { PublicLayout } from '@/components/layout/PublicLayout';
 import { supabase } from '@/integrations/supabase/client';
 import { parseLocalDate } from '@/lib/dateUtils';
+import { PaymentModal } from '@/components/booking/PaymentModal';
 import { 
   Calendar, 
   Clock, 
@@ -13,7 +14,7 @@ import {
   ArrowLeft, 
   ArrowRight,
   Star,
-  CreditCard,
+  QrCode,
   Loader2,
   Stethoscope,
   Heart,
@@ -98,7 +99,10 @@ interface ExistingAppointment {
 
 export default function BookingPage() {
   const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
   const canceled = searchParams.get('canceled');
+  
+  const [paymentModalOpen, setPaymentModalOpen] = useState(false);
   
   const [step, setStep] = useState<Step>('service');
   const [services, setServices] = useState<Service[]>([]);
@@ -106,7 +110,6 @@ export default function BookingPage() {
   const [schedules, setSchedules] = useState<ProfessionalSchedule[]>([]);
   const [existingAppointments, setExistingAppointments] = useState<ExistingAppointment[]>([]);
   const [loading, setLoading] = useState(true);
-  const [processing, setProcessing] = useState(false);
   
   const [booking, setBooking] = useState<BookingData>({
     serviceId: null,
@@ -263,47 +266,17 @@ export default function BookingPage() {
     setBooking((prev) => ({ ...prev, time }));
   };
 
-  const handlePayment = async () => {
-    if (!booking.patientName || !booking.patientEmail) {
-      toast.error('Por favor, preencha nome e email para continuar');
-      return;
-    }
-
+  const handleOpenPaymentModal = () => {
     if (!selectedService || !selectedProfessional || !booking.date || !booking.time) {
       toast.error('Dados incompletos. Por favor, revise seu agendamento.');
       return;
     }
+    setPaymentModalOpen(true);
+  };
 
-    setProcessing(true);
-
-    try {
-      const { data, error } = await supabase.functions.invoke('create-payment', {
-        body: {
-          serviceName: selectedService.name,
-          servicePrice: selectedService.price_cents,
-          stripePriceId: selectedService.stripe_price_id,
-          professionalName: selectedProfessional.name,
-          professionalId: selectedProfessional.id,
-          appointmentDate: booking.date,
-          appointmentTime: booking.time,
-          patientName: booking.patientName,
-          patientEmail: booking.patientEmail,
-          patientPhone: booking.patientPhone
-        }
-      });
-
-      if (error) throw error;
-
-      if (data?.url) {
-        window.location.href = data.url;
-      } else {
-        throw new Error('No checkout URL received');
-      }
-    } catch (error) {
-      console.error('Payment error:', error);
-      toast.error('Erro ao processar pagamento. Tente novamente.');
-      setProcessing(false);
-    }
+  const handlePaymentSuccess = (appointmentId: string) => {
+    setPaymentModalOpen(false);
+    navigate(`/agendamento-sucesso?appointment_id=${appointmentId}`);
   };
 
   const goBack = () => {
@@ -593,15 +566,15 @@ export default function BookingPage() {
               </div>
             )}
 
-            {/* Step 4: Payment */}
+            {/* Step 4: Summary & Payment */}
             {step === 'confirm' && (
               <div className="animate-fade-in">
                 <h1 className="text-2xl font-bold mb-2">Finalizar Agendamento</h1>
                 <p className="text-clinic-text-secondary mb-8">
-                  Preencha seus dados e realize o pagamento
+                  Revise os dados e clique para pagar via PIX
                 </p>
 
-                <div className="grid lg:grid-cols-2 gap-8">
+                <div className="grid lg:grid-cols-1 gap-8 max-w-lg mx-auto">
                   {/* Summary */}
                   <div className="bg-background border border-clinic-border-subtle rounded-xl p-6">
                     <h3 className="font-semibold mb-4">Resumo do Agendamento</h3>
@@ -647,74 +620,20 @@ export default function BookingPage() {
                           R$ {selectedService ? (selectedService.price_cents / 100).toFixed(2) : '0.00'}
                         </span>
                       </div>
-                    </div>
-                  </div>
-
-                  {/* Form */}
-                  <div className="bg-background border border-clinic-border-subtle rounded-xl p-6">
-                    <h3 className="font-semibold mb-4">Seus Dados</h3>
-
-                    <div className="space-y-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="name">Nome Completo *</Label>
-                        <Input
-                          id="name"
-                          placeholder="Digite seu nome"
-                          value={booking.patientName}
-                          onChange={(e) =>
-                            setBooking((prev) => ({ ...prev, patientName: e.target.value }))
-                          }
-                        />
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label htmlFor="email">E-mail *</Label>
-                        <Input
-                          id="email"
-                          type="email"
-                          placeholder="seu@email.com"
-                          value={booking.patientEmail}
-                          onChange={(e) =>
-                            setBooking((prev) => ({ ...prev, patientEmail: e.target.value }))
-                          }
-                        />
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label htmlFor="phone">WhatsApp (opcional)</Label>
-                        <Input
-                          id="phone"
-                          placeholder="(11) 99999-9999"
-                          value={booking.patientPhone}
-                          onChange={(e) =>
-                            setBooking((prev) => ({ ...prev, patientPhone: e.target.value }))
-                          }
-                        />
-                      </div>
 
                       <div className="pt-4">
                         <Button
                           variant="clinic"
                           size="lg"
                           className="w-full"
-                          onClick={handlePayment}
-                          disabled={processing}
+                          onClick={handleOpenPaymentModal}
                         >
-                          {processing ? (
-                            <>
-                              <Loader2 className="h-4 w-4 animate-spin" />
-                              Processando...
-                            </>
-                          ) : (
-                            <>
-                              <CreditCard className="h-4 w-4" />
-                              Pagar R$ {selectedService ? (selectedService.price_cents / 100).toFixed(2) : '0.00'}
-                            </>
-                          )}
+                          <QrCode className="h-4 w-4" />
+                          Finalizar Compra
                         </Button>
 
                         <p className="text-xs text-clinic-text-muted text-center mt-3">
-                          Pagamento seguro via Stripe. Você será redirecionado para finalizar.
+                          Pagamento seguro via PIX com AbacatePay
                         </p>
                       </div>
                     </div>
@@ -725,6 +644,24 @@ export default function BookingPage() {
           </div>
         </div>
       </div>
+
+      {/* Payment Modal */}
+      {selectedService && selectedProfessional && booking.date && booking.time && (
+        <PaymentModal
+          open={paymentModalOpen}
+          onOpenChange={setPaymentModalOpen}
+          bookingData={{
+            serviceId: selectedService.id,
+            serviceName: selectedService.name,
+            servicePrice: selectedService.price_cents,
+            professionalId: selectedProfessional.id,
+            professionalName: selectedProfessional.name,
+            appointmentDate: booking.date,
+            appointmentTime: booking.time,
+          }}
+          onSuccess={handlePaymentSuccess}
+        />
+      )}
     </PublicLayout>
   );
 }

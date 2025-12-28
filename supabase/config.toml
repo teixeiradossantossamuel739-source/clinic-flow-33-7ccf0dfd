@@ -14,3 +14,9 @@ verify_jwt = false
 
 [functions.whatsapp-notify]
 verify_jwt = false
+
+[functions.create-pix-payment]
+verify_jwt = false
+
+[functions.abacatepay-webhook]
+verify_jwt = false
