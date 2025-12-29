@@ -44,7 +44,7 @@ const defaultPreferences: Omit<Preferences, 'professional_id'> = {
   notify_reminder_24h: true,
   notify_sound_enabled: true,
   whatsapp_auto_message: false,
-  theme_preference: 'system',
+  theme_preference: 'light',
 };
 
 interface ThemeCardProps {
@@ -58,7 +58,7 @@ interface ThemeCardProps {
 }
 
 function ThemeCard({ value, label, icon, isSelected, onClick, previewBg, previewFg }: ThemeCardProps) {
-  const isSystem = value === 'system';
+  const isFuturistic = value === 'futuristic';
   
   return (
     <button
@@ -66,9 +66,9 @@ function ThemeCard({ value, label, icon, isSelected, onClick, previewBg, preview
       className={cn(
         "relative flex flex-col items-center gap-3 p-4 rounded-xl border-2 transition-all duration-300 group overflow-hidden",
         "hover:scale-[1.02] active:scale-[0.98]",
-        isSystem && isSelected
+        isFuturistic && isSelected
           ? "border-cyan-400 bg-gradient-to-br from-blue-950 to-indigo-950 shadow-lg shadow-cyan-500/30"
-          : isSystem
+          : isFuturistic
           ? "border-cyan-600/30 bg-gradient-to-br from-blue-950/80 to-indigo-950/80 hover:border-cyan-400/60"
           : isSelected 
           ? "border-primary bg-primary/5 shadow-lg shadow-primary/20" 
@@ -76,12 +76,12 @@ function ThemeCard({ value, label, icon, isSelected, onClick, previewBg, preview
       )}
     >
       {/* Glow effect when selected */}
-      {isSelected && !isSystem && (
+      {isSelected && !isFuturistic && (
         <div className="absolute inset-0 bg-gradient-to-br from-primary/10 via-transparent to-primary/5 animate-pulse" />
       )}
       
-      {/* Futuristic glow for system theme */}
-      {isSystem && (
+      {/* Futuristic glow for futuristic theme */}
+      {isFuturistic && (
         <div className={cn(
           "absolute inset-0 bg-gradient-to-br from-cyan-500/10 via-purple-500/5 to-blue-500/10",
           isSelected && "animate-pulse"
@@ -93,11 +93,11 @@ function ThemeCard({ value, label, icon, isSelected, onClick, previewBg, preview
         <>
           <Sparkles className={cn(
             "absolute top-1 right-1 h-3 w-3 animate-pulse",
-            isSystem ? "text-cyan-400/80" : "text-primary/60"
+            isFuturistic ? "text-cyan-400/80" : "text-primary/60"
           )} />
           <Sparkles className={cn(
             "absolute bottom-1 left-1 h-3 w-3 animate-pulse",
-            isSystem ? "text-purple-400/60" : "text-primary/40"
+            isFuturistic ? "text-purple-400/60" : "text-primary/40"
           )} style={{ animationDelay: '0.5s' }} />
         </>
       )}
@@ -105,9 +105,9 @@ function ThemeCard({ value, label, icon, isSelected, onClick, previewBg, preview
       {/* Icon with animation */}
       <div className={cn(
         "relative z-10 p-3 rounded-full transition-all duration-300",
-        isSystem && isSelected
-          ? "bg-gradient-to-br from-cyan-400 to-blue-500 text-white shadow-lg shadow-cyan-400/40"
-          : isSystem
+        isFuturistic && isSelected
+          ? "bg-gradient-to-br from-cyan-400 to-purple-500 text-white shadow-lg shadow-cyan-400/40"
+          : isFuturistic
           ? "bg-cyan-900/50 text-cyan-400 group-hover:bg-cyan-800/60"
           : isSelected 
           ? "bg-primary text-primary-foreground shadow-lg shadow-primary/30" 
@@ -117,7 +117,7 @@ function ThemeCard({ value, label, icon, isSelected, onClick, previewBg, preview
           "transition-transform duration-500",
           isSelected && value === 'light' && "animate-spin",
           isSelected && value === 'dark' && "animate-pulse",
-          isSelected && value === 'system' && "animate-bounce"
+          isSelected && value === 'futuristic' && "animate-bounce"
         )} style={{ animationDuration: value === 'light' ? '3s' : '2s' }}>
           {icon}
         </div>
@@ -126,7 +126,7 @@ function ThemeCard({ value, label, icon, isSelected, onClick, previewBg, preview
       {/* Label */}
       <span className={cn(
         "relative z-10 font-medium text-sm transition-colors duration-300",
-        isSystem 
+        isFuturistic 
           ? isSelected ? "text-purple-300" : "text-purple-400/80 group-hover:text-purple-300"
           : isSelected ? "text-primary" : "text-muted-foreground group-hover:text-foreground"
       )}>
@@ -136,32 +136,21 @@ function ThemeCard({ value, label, icon, isSelected, onClick, previewBg, preview
       {/* Preview mini screen */}
       <div className={cn(
         "relative z-10 w-full h-12 rounded-lg border overflow-hidden transition-all duration-300",
-        isSystem 
+        isFuturistic 
           ? isSelected ? "border-cyan-400/40 shadow-inner shadow-cyan-500/20" : "border-cyan-600/20"
           : isSelected ? "border-primary/30 shadow-inner" : "border-border/30"
       )}>
-        {isSystem ? (
-          // Futuristic split preview for system theme
-          <div className="w-full h-full flex bg-gradient-to-r from-blue-900 to-indigo-900">
-            <div className="w-1/2 h-full border-r border-cyan-500/30">
-              <div className="h-2 w-full bg-blue-800/50 flex items-center gap-0.5 px-1">
-                <div className="w-1 h-1 rounded-full bg-purple-400" />
-                <div className="w-1 h-1 rounded-full bg-cyan-400" />
-              </div>
-              <div className="p-1 space-y-0.5">
-                <div className="h-1 w-3/4 rounded bg-purple-500/50" />
-                <div className="h-1 w-1/2 rounded bg-cyan-500/30" />
-              </div>
+        {isFuturistic ? (
+          // Futuristic preview with cyan/purple gradient
+          <div className="w-full h-full bg-gradient-to-br from-blue-950 via-indigo-950 to-purple-950">
+            <div className="h-2 w-full bg-gradient-to-r from-cyan-500/20 to-purple-500/20 flex items-center gap-0.5 px-1">
+              <div className="w-1 h-1 rounded-full bg-cyan-400" />
+              <div className="w-1 h-1 rounded-full bg-purple-400" />
+              <div className="w-1 h-1 rounded-full bg-cyan-400" />
             </div>
-            <div className="w-1/2 h-full">
-              <div className="h-2 w-full bg-indigo-800/50 flex items-center justify-end gap-0.5 px-1">
-                <div className="w-1 h-1 rounded-full bg-cyan-400" />
-                <div className="w-1 h-1 rounded-full bg-purple-400" />
-              </div>
-              <div className="p-1 space-y-0.5">
-                <div className="h-1 w-3/4 rounded bg-cyan-500/40" />
-                <div className="h-1 w-1/2 rounded bg-purple-500/30" />
-              </div>
+            <div className="p-1.5 space-y-1">
+              <div className="h-1.5 w-3/4 rounded bg-gradient-to-r from-purple-400/50 to-cyan-400/50" />
+              <div className="h-1.5 w-1/2 rounded bg-cyan-500/30" />
             </div>
           </div>
         ) : (
@@ -185,7 +174,7 @@ function ThemeCard({ value, label, icon, isSelected, onClick, previewBg, preview
       {isSelected && (
         <div className={cn(
           "absolute -bottom-px left-1/2 -translate-x-1/2 w-8 h-1 rounded-t-full",
-          isSystem ? "bg-gradient-to-r from-cyan-400 to-purple-500" : "bg-primary"
+          isFuturistic ? "bg-gradient-to-r from-cyan-400 to-purple-500" : "bg-primary"
         )} />
       )}
     </button>
@@ -422,13 +411,13 @@ export default function FuncionarioConfiguracoes() {
                   previewFg="#ffffff"
                 />
                 <ThemeCard
-                  value="system"
-                  label="Sistema"
-                  icon={<Monitor className="h-5 w-5" />}
-                  isSelected={currentTheme === 'system'}
-                  onClick={() => handleThemeChange('system')}
-                  previewBg="linear-gradient(135deg, #ffffff 50%, #1a1a2e 50%)"
-                  previewFg="#888888"
+                  value="futuristic"
+                  label="Futurístico"
+                  icon={<Sparkles className="h-5 w-5" />}
+                  isSelected={currentTheme === 'futuristic'}
+                  onClick={() => handleThemeChange('futuristic')}
+                  previewBg="#0f172a"
+                  previewFg="#a855f7"
                 />
               </div>
               <p className="text-xs text-muted-foreground text-center pt-2">
