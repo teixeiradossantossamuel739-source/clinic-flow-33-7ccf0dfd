@@ -27,7 +27,8 @@ import {
   LogOut,
   Menu,
   Stethoscope,
-  Bell
+  Bell,
+  Settings
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -48,6 +49,7 @@ const menuItems = [
   { title: 'Financeiro', url: '/funcionario/financeiro', icon: DollarSign },
   { title: 'Disponibilidade', url: '/funcionario/disponibilidade', icon: Clock },
   { title: 'Meu Perfil', url: '/funcionario/perfil', icon: User },
+  { title: 'Configurações', url: '/funcionario/configuracoes', icon: Settings },
 ];
 
 export function FuncionarioLayout({ children }: FuncionarioLayoutProps) {
