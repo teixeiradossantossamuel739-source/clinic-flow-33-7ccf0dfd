@@ -127,6 +127,59 @@ export type Database = {
           },
         ]
       }
+      professional_preferences: {
+        Row: {
+          created_at: string
+          id: string
+          notify_appointment_cancelled: boolean
+          notify_appointment_confirmed: boolean
+          notify_new_appointment: boolean
+          notify_payment_received: boolean
+          notify_reminder_24h: boolean
+          notify_sound_enabled: boolean
+          professional_id: string
+          theme_preference: string
+          updated_at: string
+          whatsapp_auto_message: boolean
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          notify_appointment_cancelled?: boolean
+          notify_appointment_confirmed?: boolean
+          notify_new_appointment?: boolean
+          notify_payment_received?: boolean
+          notify_reminder_24h?: boolean
+          notify_sound_enabled?: boolean
+          professional_id: string
+          theme_preference?: string
+          updated_at?: string
+          whatsapp_auto_message?: boolean
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          notify_appointment_cancelled?: boolean
+          notify_appointment_confirmed?: boolean
+          notify_new_appointment?: boolean
+          notify_payment_received?: boolean
+          notify_reminder_24h?: boolean
+          notify_sound_enabled?: boolean
+          professional_id?: string
+          theme_preference?: string
+          updated_at?: string
+          whatsapp_auto_message?: boolean
+        }
+        Relationships: [
+          {
+            foreignKeyName: "professional_preferences_professional_id_fkey"
+            columns: ["professional_id"]
+            isOneToOne: true
+            referencedRelation: "professionals"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       professional_schedules: {
         Row: {
           created_at: string

@@ -28,6 +28,7 @@ import FuncionarioFinanceiro from "./pages/funcionario/FuncionarioFinanceiro";
 import FuncionarioDisponibilidade from "./pages/funcionario/FuncionarioDisponibilidade";
 import FuncionarioPerfil from "./pages/funcionario/FuncionarioPerfil";
 import FuncionarioPacientes from "./pages/funcionario/FuncionarioPacientes";
+import FuncionarioConfiguracoes from "./pages/funcionario/FuncionarioConfiguracoes";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -179,6 +180,14 @@ const App = () => (
               element={
                 <ProtectedRoute allowedRoles={['funcionario', 'admin']}>
                   <FuncionarioPacientes />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/funcionario/configuracoes"
+              element={
+                <ProtectedRoute allowedRoles={['funcionario', 'admin']}>
+                  <FuncionarioConfiguracoes />
                 </ProtectedRoute>
               }
             />
