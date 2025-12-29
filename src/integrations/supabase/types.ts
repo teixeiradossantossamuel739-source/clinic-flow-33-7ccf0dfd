@@ -19,9 +19,11 @@ export type Database = {
           amount_cents: number
           appointment_date: string
           appointment_time: string
+          confirmation_token: string | null
           created_at: string
           id: string
           notes: string | null
+          patient_confirmed_at: string | null
           patient_email: string
           patient_name: string
           patient_phone: string
@@ -38,9 +40,11 @@ export type Database = {
           amount_cents: number
           appointment_date: string
           appointment_time: string
+          confirmation_token?: string | null
           created_at?: string
           id?: string
           notes?: string | null
+          patient_confirmed_at?: string | null
           patient_email: string
           patient_name: string
           patient_phone: string
@@ -57,9 +61,11 @@ export type Database = {
           amount_cents?: number
           appointment_date?: string
           appointment_time?: string
+          confirmation_token?: string | null
           created_at?: string
           id?: string
           notes?: string | null
+          patient_confirmed_at?: string | null
           patient_email?: string
           patient_name?: string
           patient_phone?: string

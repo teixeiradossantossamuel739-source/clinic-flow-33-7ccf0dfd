@@ -58,6 +58,8 @@ interface Appointment {
   amount_cents: number;
   notes: string | null;
   service_id: string | null;
+  confirmation_token?: string;
+  patient_confirmed_at?: string | null;
 }
 
 interface FinancialGoal {
@@ -335,13 +337,17 @@ Aguardamos você!`;
     );
   }, [appointments]);
 
-  // Generate reminder message
-  const generateReminderLink = (apt: Appointment) => {
+  // Generate reminder message with confirmation link
+  const generateReminderLink = (apt: Appointment & { confirmation_token?: string }) => {
     const digits = apt.patient_phone.replace(/\D/g, '');
     const formattedPhone = digits.startsWith('55') ? digits : `55${digits}`;
     const [year, month, day] = apt.appointment_date.split('-');
     const formattedDate = `${day}/${month}/${year}`;
     const formattedTime = apt.appointment_time.slice(0, 5);
+    
+    const confirmationUrl = apt.confirmation_token 
+      ? `${window.location.origin}/confirmar-presenca?token=${apt.confirmation_token}`
+      : '';
     
     const message = `📅 *Lembrete de Consulta*
 
@@ -353,6 +359,7 @@ Lembramos que você tem uma consulta agendada para amanhã:
 ⏰ *Horário:* ${formattedTime}
 🏥 *Profissional:* ${professional?.name}
 
+${confirmationUrl ? `✅ *Confirme sua presença:*\n${confirmationUrl}\n` : ''}
 ⚠️ Em caso de imprevisto, por favor avise com antecedência.
 
 Aguardamos você! 😊`;
@@ -805,19 +812,34 @@ Aguardamos você! 😊`;
                     className="flex items-center justify-between p-4 rounded-lg border bg-card"
                   >
                     <div className="flex items-center gap-4">
-                      <div className="h-10 w-10 rounded-full bg-yellow-500/10 flex items-center justify-center">
-                        <span className="text-sm font-medium text-yellow-600">
-                          {apt.patient_name.charAt(0).toUpperCase()}
-                        </span>
+                      <div className={`h-10 w-10 rounded-full flex items-center justify-center ${
+                        apt.patient_confirmed_at 
+                          ? 'bg-green-500/10' 
+                          : 'bg-yellow-500/10'
+                      }`}>
+                        {apt.patient_confirmed_at ? (
+                          <CheckCircle2 className="h-5 w-5 text-green-600" />
+                        ) : (
+                          <span className="text-sm font-medium text-yellow-600">
+                            {apt.patient_name.charAt(0).toUpperCase()}
+                          </span>
+                        )}
                       </div>
                       <div>
-                        <p className="font-medium">{apt.patient_name}</p>
+                        <div className="flex items-center gap-2">
+                          <p className="font-medium">{apt.patient_name}</p>
+                          {apt.patient_confirmed_at && (
+                            <span className="text-xs bg-green-500/10 text-green-600 px-2 py-0.5 rounded-full">
+                              Confirmado
+                            </span>
+                          )}
+                        </div>
                         <p className="text-sm text-muted-foreground">
                           {apt.appointment_time.slice(0, 5)}
                         </p>
                       </div>
                     </div>
-                    {apt.patient_phone && (
+                    {apt.patient_phone && !apt.patient_confirmed_at && (
                       <Button 
                         size="sm" 
                         variant="outline"
@@ -833,6 +855,11 @@ Aguardamos você! 😊`;
                           Enviar Lembrete
                         </a>
                       </Button>
+                    )}
+                    {apt.patient_confirmed_at && (
+                      <span className="text-xs text-muted-foreground">
+                        {format(new Date(apt.patient_confirmed_at), "dd/MM 'às' HH:mm")}
+                      </span>
                     )}
                   </div>
                 ))}
