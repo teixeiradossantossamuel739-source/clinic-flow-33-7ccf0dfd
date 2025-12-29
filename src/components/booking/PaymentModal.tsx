@@ -1,11 +1,11 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import { Loader2, QrCode, Copy, CheckCircle2 } from 'lucide-react';
+import { Loader2, QrCode, Copy, CheckCircle2, Clock, AlertCircle } from 'lucide-react';
 import { z } from 'zod';
 import pixQrCodeImage from '@/assets/pix-qrcode.png';
 
@@ -28,6 +28,7 @@ interface PaymentModalProps {
     servicePrice: number;
     professionalId: string;
     professionalName: string;
+    professionalPhone?: string;
     appointmentDate: string;
     appointmentTime: string;
   };
@@ -37,6 +38,8 @@ interface PaymentModalProps {
 interface AppointmentData {
   appointmentId: string;
 }
+
+type PaymentStep = 'form' | 'pix' | 'awaiting_confirmation';
 
 export function PaymentModal({ open, onOpenChange, bookingData, onSuccess }: PaymentModalProps) {
   const [formData, setFormData] = useState({
@@ -48,9 +51,9 @@ export function PaymentModal({ open, onOpenChange, bookingData, onSuccess }: Pay
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
   const [appointmentData, setAppointmentData] = useState<AppointmentData | null>(null);
-  const [showPixScreen, setShowPixScreen] = useState(false);
+  const [step, setStep] = useState<PaymentStep>('form');
   const [copied, setCopied] = useState(false);
-  const [checkingPayment, setCheckingPayment] = useState(false);
+  const [confirmingPayment, setConfirmingPayment] = useState(false);
 
   const formatCpf = (value: string) => {
     const numbers = value.replace(/\D/g, '').slice(0, 11);
@@ -127,7 +130,7 @@ export function PaymentModal({ open, onOpenChange, bookingData, onSuccess }: Pay
       if (error) throw error;
 
       setAppointmentData({ appointmentId: data.id });
-      setShowPixScreen(true);
+      setStep('pix');
       toast.success('Agendamento criado! Realize o pagamento via PIX.');
     } catch (err) {
       console.error('Error creating appointment:', err);
@@ -149,207 +152,321 @@ export function PaymentModal({ open, onOpenChange, bookingData, onSuccess }: Pay
     }
   };
 
-  const handleCheckPayment = async () => {
+  // Handle "Já Paguei" - update to awaiting_confirmation and notify professional
+  const handleConfirmPayment = async () => {
     if (!appointmentData?.appointmentId) return;
 
-    setCheckingPayment(true);
+    setConfirmingPayment(true);
     try {
-      const { data, error } = await supabase
+      // Update payment_status to awaiting_confirmation
+      const { error } = await supabase
         .from('appointments')
-        .select('status, payment_status')
-        .eq('id', appointmentData.appointmentId)
-        .single();
+        .update({ payment_status: 'awaiting_confirmation' })
+        .eq('id', appointmentData.appointmentId);
 
       if (error) throw error;
 
-      if (data?.payment_status === 'paid' || data?.status === 'confirmed') {
-        toast.success('Pagamento confirmado!');
-        onSuccess(appointmentData.appointmentId);
-      } else {
-        toast.info('Pagamento ainda não confirmado. Aguarde alguns instantes.');
+      // Notify professional via WhatsApp
+      try {
+        await supabase.functions.invoke('whatsapp-notify', {
+          body: {
+            professionalPhone: bookingData.professionalPhone || '',
+            patientName: formData.name,
+            patientPhone: formData.phone,
+            appointmentDate: bookingData.appointmentDate,
+            appointmentTime: bookingData.appointmentTime,
+            serviceName: bookingData.serviceName,
+            appointmentId: appointmentData.appointmentId,
+            type: 'payment_analysis',
+            amountCents: bookingData.servicePrice,
+          }
+        });
+      } catch (whatsappError) {
+        console.error('WhatsApp notification error:', whatsappError);
+        // Continue even if WhatsApp fails
       }
+
+      setStep('awaiting_confirmation');
+      toast.success('Pagamento informado! Aguarde a confirmação do profissional.');
     } catch (err) {
-      console.error('Check payment error:', err);
-      toast.error('Erro ao verificar pagamento');
+      console.error('Error confirming payment:', err);
+      toast.error('Erro ao informar pagamento');
     } finally {
-      setCheckingPayment(false);
+      setConfirmingPayment(false);
     }
   };
+
+  // Subscribe to realtime updates to check if payment was confirmed
+  useEffect(() => {
+    if (!appointmentData?.appointmentId || step !== 'awaiting_confirmation') return;
+
+    const channel = supabase
+      .channel('appointment-updates')
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'appointments',
+          filter: `id=eq.${appointmentData.appointmentId}`,
+        },
+        (payload) => {
+          const newData = payload.new as { payment_status?: string; status?: string };
+          if (newData.payment_status === 'paid' || newData.status === 'confirmed') {
+            toast.success('Pagamento confirmado pelo profissional!');
+            onSuccess(appointmentData.appointmentId);
+          } else if (newData.status === 'cancelled') {
+            toast.error('Agendamento foi cancelado.');
+            handleClose();
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [appointmentData?.appointmentId, step]);
 
   const handleClose = () => {
     setFormData({ name: '', phone: '', email: '', cpf: '' });
     setErrors({});
     setAppointmentData(null);
-    setShowPixScreen(false);
+    setStep('form');
     setCopied(false);
     onOpenChange(false);
+  };
+
+  const renderFormStep = () => (
+    <div className="space-y-4">
+      <div className="space-y-2">
+        <Label htmlFor="modal-name">Nome Completo *</Label>
+        <Input
+          id="modal-name"
+          placeholder="Digite seu nome completo"
+          value={formData.name}
+          onChange={(e) => handleChange('name', e.target.value)}
+          className={errors.name ? 'border-destructive' : ''}
+        />
+        {errors.name && <p className="text-sm text-destructive">{errors.name}</p>}
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="modal-phone">Telefone *</Label>
+        <Input
+          id="modal-phone"
+          placeholder="(11) 99999-9999"
+          value={formData.phone}
+          onChange={(e) => handleChange('phone', e.target.value)}
+          className={errors.phone ? 'border-destructive' : ''}
+        />
+        {errors.phone && <p className="text-sm text-destructive">{errors.phone}</p>}
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="modal-email">E-mail *</Label>
+        <Input
+          id="modal-email"
+          type="email"
+          placeholder="seu@email.com"
+          value={formData.email}
+          onChange={(e) => handleChange('email', e.target.value)}
+          className={errors.email ? 'border-destructive' : ''}
+        />
+        {errors.email && <p className="text-sm text-destructive">{errors.email}</p>}
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="modal-cpf">CPF *</Label>
+        <Input
+          id="modal-cpf"
+          placeholder="000.000.000-00"
+          value={formData.cpf}
+          onChange={(e) => handleChange('cpf', e.target.value)}
+          className={errors.cpf ? 'border-destructive' : ''}
+        />
+        {errors.cpf && <p className="text-sm text-destructive">{errors.cpf}</p>}
+      </div>
+
+      <div className="bg-muted/50 rounded-lg p-3 text-sm">
+        <p className="font-medium">{bookingData.serviceName}</p>
+        <p className="text-muted-foreground">{bookingData.professionalName}</p>
+        <p className="text-muted-foreground">
+          {bookingData.appointmentDate} às {bookingData.appointmentTime}
+        </p>
+        <p className="font-bold text-primary mt-1">
+          R$ {(bookingData.servicePrice / 100).toFixed(2)}
+        </p>
+      </div>
+
+      <Button
+        variant="clinic"
+        className="w-full"
+        onClick={handleGenerateQrCode}
+        disabled={loading}
+      >
+        {loading ? (
+          <>
+            <Loader2 className="h-4 w-4 animate-spin mr-2" />
+            Processando...
+          </>
+        ) : (
+          <>
+            <QrCode className="h-4 w-4 mr-2" />
+            Gerar QR Code PIX
+          </>
+        )}
+      </Button>
+    </div>
+  );
+
+  const renderPixStep = () => (
+    <div className="space-y-4">
+      <div className="flex justify-center">
+        <img
+          src={pixQrCodeImage}
+          alt="QR Code PIX"
+          className="w-56 h-56 rounded-lg"
+        />
+      </div>
+
+      <div className="text-center">
+        <p className="font-bold text-lg">SAMUEL TEIXEIRA DOS SANTOS</p>
+        <p className="text-muted-foreground">+55 (47) 99788-7556</p>
+      </div>
+
+      <div className="space-y-2">
+        <Label>Código PIX Copia e Cola</Label>
+        <div className="flex gap-2">
+          <Input
+            value={STATIC_PIX_CODE}
+            readOnly
+            className="font-mono text-xs"
+          />
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={handleCopyPix}
+            className="shrink-0"
+          >
+            {copied ? (
+              <CheckCircle2 className="h-4 w-4 text-green-500" />
+            ) : (
+              <Copy className="h-4 w-4" />
+            )}
+          </Button>
+        </div>
+      </div>
+
+      <div className="bg-muted/50 rounded-lg p-3 text-sm text-center">
+        <p className="font-medium text-primary">
+          Valor: R$ {(bookingData.servicePrice / 100).toFixed(2)}
+        </p>
+        <p className="text-muted-foreground mt-1">
+          Após realizar o pagamento, clique no botão abaixo
+        </p>
+      </div>
+
+      <Button
+        variant="clinic"
+        className="w-full"
+        onClick={handleConfirmPayment}
+        disabled={confirmingPayment}
+      >
+        {confirmingPayment ? (
+          <>
+            <Loader2 className="h-4 w-4 animate-spin mr-2" />
+            Enviando...
+          </>
+        ) : (
+          <>
+            <CheckCircle2 className="h-4 w-4 mr-2" />
+            Já Paguei
+          </>
+        )}
+      </Button>
+
+      <Button
+        variant="ghost"
+        className="w-full"
+        onClick={() => setStep('form')}
+      >
+        Voltar
+      </Button>
+    </div>
+  );
+
+  const renderAwaitingConfirmationStep = () => (
+    <div className="space-y-6 py-4">
+      <div className="flex flex-col items-center text-center space-y-4">
+        <div className="h-16 w-16 rounded-full bg-amber-100 flex items-center justify-center">
+          <Clock className="h-8 w-8 text-amber-600 animate-pulse" />
+        </div>
+        
+        <div className="space-y-2">
+          <h3 className="text-lg font-semibold">Pagamento em Análise</h3>
+          <p className="text-muted-foreground text-sm max-w-xs">
+            Seu pagamento foi informado e está aguardando confirmação do profissional.
+          </p>
+        </div>
+      </div>
+
+      <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 text-sm">
+        <div className="flex items-start gap-3">
+          <AlertCircle className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
+          <div>
+            <p className="font-medium text-amber-800">O que acontece agora?</p>
+            <ul className="mt-2 space-y-1 text-amber-700">
+              <li>• O profissional foi notificado</li>
+              <li>• Ele irá conferir o pagamento</li>
+              <li>• Você será avisado quando confirmado</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <div className="bg-muted/50 rounded-lg p-3 text-sm text-center">
+        <p className="font-medium">{bookingData.serviceName}</p>
+        <p className="text-muted-foreground">
+          {bookingData.appointmentDate} às {bookingData.appointmentTime}
+        </p>
+        <p className="font-bold text-primary mt-1">
+          R$ {(bookingData.servicePrice / 100).toFixed(2)}
+        </p>
+      </div>
+
+      <p className="text-xs text-muted-foreground text-center">
+        Você pode fechar esta janela. Será notificado quando o pagamento for confirmado.
+      </p>
+
+      <Button
+        variant="outline"
+        className="w-full"
+        onClick={handleClose}
+      >
+        Fechar
+      </Button>
+    </div>
+  );
+
+  const getTitle = () => {
+    switch (step) {
+      case 'form': return 'Dados para Pagamento';
+      case 'pix': return 'Pague com PIX';
+      case 'awaiting_confirmation': return 'Aguardando Confirmação';
+    }
   };
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>
-            {showPixScreen ? 'Pague com PIX' : 'Dados para Pagamento'}
-          </DialogTitle>
+          <DialogTitle>{getTitle()}</DialogTitle>
         </DialogHeader>
 
-        {!showPixScreen ? (
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="modal-name">Nome Completo *</Label>
-              <Input
-                id="modal-name"
-                placeholder="Digite seu nome completo"
-                value={formData.name}
-                onChange={(e) => handleChange('name', e.target.value)}
-                className={errors.name ? 'border-destructive' : ''}
-              />
-              {errors.name && <p className="text-sm text-destructive">{errors.name}</p>}
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="modal-phone">Telefone *</Label>
-              <Input
-                id="modal-phone"
-                placeholder="(11) 99999-9999"
-                value={formData.phone}
-                onChange={(e) => handleChange('phone', e.target.value)}
-                className={errors.phone ? 'border-destructive' : ''}
-              />
-              {errors.phone && <p className="text-sm text-destructive">{errors.phone}</p>}
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="modal-email">E-mail *</Label>
-              <Input
-                id="modal-email"
-                type="email"
-                placeholder="seu@email.com"
-                value={formData.email}
-                onChange={(e) => handleChange('email', e.target.value)}
-                className={errors.email ? 'border-destructive' : ''}
-              />
-              {errors.email && <p className="text-sm text-destructive">{errors.email}</p>}
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="modal-cpf">CPF *</Label>
-              <Input
-                id="modal-cpf"
-                placeholder="000.000.000-00"
-                value={formData.cpf}
-                onChange={(e) => handleChange('cpf', e.target.value)}
-                className={errors.cpf ? 'border-destructive' : ''}
-              />
-              {errors.cpf && <p className="text-sm text-destructive">{errors.cpf}</p>}
-            </div>
-
-            <div className="bg-muted/50 rounded-lg p-3 text-sm">
-              <p className="font-medium">{bookingData.serviceName}</p>
-              <p className="text-muted-foreground">{bookingData.professionalName}</p>
-              <p className="text-muted-foreground">
-                {bookingData.appointmentDate} às {bookingData.appointmentTime}
-              </p>
-              <p className="font-bold text-primary mt-1">
-                R$ {(bookingData.servicePrice / 100).toFixed(2)}
-              </p>
-            </div>
-
-            <Button
-              variant="clinic"
-              className="w-full"
-              onClick={handleGenerateQrCode}
-              disabled={loading}
-            >
-              {loading ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                  Processando...
-                </>
-              ) : (
-                <>
-                  <QrCode className="h-4 w-4 mr-2" />
-                  Gerar QR Code PIX
-                </>
-              )}
-            </Button>
-          </div>
-        ) : (
-          <div className="space-y-4">
-            <div className="flex justify-center">
-              <img
-                src={pixQrCodeImage}
-                alt="QR Code PIX"
-                className="w-56 h-56 rounded-lg"
-              />
-            </div>
-
-            <div className="text-center">
-              <p className="font-bold text-lg">SAMUEL TEIXEIRA DOS SANTOS</p>
-              <p className="text-muted-foreground">+55 (47) 99788-7556</p>
-            </div>
-
-            <div className="space-y-2">
-              <Label>Código PIX Copia e Cola</Label>
-              <div className="flex gap-2">
-                <Input
-                  value={STATIC_PIX_CODE}
-                  readOnly
-                  className="font-mono text-xs"
-                />
-                <Button
-                  variant="outline"
-                  size="icon"
-                  onClick={handleCopyPix}
-                  className="shrink-0"
-                >
-                  {copied ? (
-                    <CheckCircle2 className="h-4 w-4 text-green-500" />
-                  ) : (
-                    <Copy className="h-4 w-4" />
-                  )}
-                </Button>
-              </div>
-            </div>
-
-            <div className="bg-muted/50 rounded-lg p-3 text-sm text-center">
-              <p className="font-medium text-primary">
-                Valor: R$ {(bookingData.servicePrice / 100).toFixed(2)}
-              </p>
-              <p className="text-muted-foreground mt-1">
-                Após realizar o pagamento, clique no botão abaixo para confirmar
-              </p>
-            </div>
-
-            <Button
-              variant="clinic"
-              className="w-full"
-              onClick={handleCheckPayment}
-              disabled={checkingPayment}
-            >
-              {checkingPayment ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                  Verificando...
-                </>
-              ) : (
-                <>
-                  <CheckCircle2 className="h-4 w-4 mr-2" />
-                  Já Paguei
-                </>
-              )}
-            </Button>
-
-            <Button
-              variant="ghost"
-              className="w-full"
-              onClick={() => setShowPixScreen(false)}
-            >
-              Voltar
-            </Button>
-          </div>
-        )}
+        {step === 'form' && renderFormStep()}
+        {step === 'pix' && renderPixStep()}
+        {step === 'awaiting_confirmation' && renderAwaitingConfirmationStep()}
       </DialogContent>
     </Dialog>
   );
