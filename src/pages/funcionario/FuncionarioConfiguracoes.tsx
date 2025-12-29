@@ -111,18 +111,46 @@ function ThemeCard({ value, label, icon, isSelected, onClick, previewBg, preview
       <div className={cn(
         "relative z-10 w-full h-12 rounded-lg border overflow-hidden transition-all duration-300",
         isSelected ? "border-primary/30 shadow-inner" : "border-border/30"
-      )} style={{ backgroundColor: previewBg }}>
-        {/* Mini header */}
-        <div className="h-2 w-full flex items-center gap-0.5 px-1" style={{ backgroundColor: previewFg + '20' }}>
-          <div className="w-1 h-1 rounded-full" style={{ backgroundColor: previewFg + '40' }} />
-          <div className="w-1 h-1 rounded-full" style={{ backgroundColor: previewFg + '40' }} />
-          <div className="w-1 h-1 rounded-full" style={{ backgroundColor: previewFg + '40' }} />
-        </div>
-        {/* Mini content lines */}
-        <div className="p-1.5 space-y-1">
-          <div className="h-1.5 w-3/4 rounded" style={{ backgroundColor: previewFg + '30' }} />
-          <div className="h-1.5 w-1/2 rounded" style={{ backgroundColor: previewFg + '20' }} />
-        </div>
+      )}>
+        {value === 'system' ? (
+          // Split preview for system theme
+          <div className="w-full h-full flex">
+            <div className="w-1/2 h-full bg-white">
+              <div className="h-2 w-full bg-gray-200 flex items-center gap-0.5 px-1">
+                <div className="w-1 h-1 rounded-full bg-gray-400" />
+                <div className="w-1 h-1 rounded-full bg-gray-400" />
+              </div>
+              <div className="p-1 space-y-0.5">
+                <div className="h-1 w-3/4 rounded bg-gray-300" />
+                <div className="h-1 w-1/2 rounded bg-gray-200" />
+              </div>
+            </div>
+            <div className="w-1/2 h-full bg-slate-900">
+              <div className="h-2 w-full bg-slate-800 flex items-center justify-end gap-0.5 px-1">
+                <div className="w-1 h-1 rounded-full bg-slate-600" />
+                <div className="w-1 h-1 rounded-full bg-slate-600" />
+              </div>
+              <div className="p-1 space-y-0.5">
+                <div className="h-1 w-3/4 rounded bg-slate-700" />
+                <div className="h-1 w-1/2 rounded bg-slate-800" />
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="w-full h-full" style={{ backgroundColor: previewBg }}>
+            {/* Mini header */}
+            <div className="h-2 w-full flex items-center gap-0.5 px-1" style={{ backgroundColor: previewFg + '20' }}>
+              <div className="w-1 h-1 rounded-full" style={{ backgroundColor: previewFg + '40' }} />
+              <div className="w-1 h-1 rounded-full" style={{ backgroundColor: previewFg + '40' }} />
+              <div className="w-1 h-1 rounded-full" style={{ backgroundColor: previewFg + '40' }} />
+            </div>
+            {/* Mini content lines */}
+            <div className="p-1.5 space-y-1">
+              <div className="h-1.5 w-3/4 rounded" style={{ backgroundColor: previewFg + '30' }} />
+              <div className="h-1.5 w-1/2 rounded" style={{ backgroundColor: previewFg + '20' }} />
+            </div>
+          </div>
+        )}
       </div>
       
       {/* Selection indicator */}
