@@ -28,9 +28,11 @@ import {
   Users,
   MessageCircle,
   Target,
-  Settings2
+  Settings2,
+  Bell,
+  Send
 } from 'lucide-react';
-import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, isToday, isTomorrow } from 'date-fns';
+import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, isToday, isTomorrow, addDays } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { parseLocalDate } from '@/lib/dateUtils';
 import { toast } from 'sonner';
@@ -323,6 +325,40 @@ Aguardamos você!`;
       })
       .slice(0, 5);
   }, [appointments]);
+
+  // Tomorrow's appointments for reminders
+  const tomorrowAppointments = useMemo(() => {
+    const tomorrow = addDays(new Date(), 1);
+    const tomorrowStr = format(tomorrow, 'yyyy-MM-dd');
+    return appointments.filter(apt => 
+      apt.appointment_date === tomorrowStr && apt.status === 'confirmed'
+    );
+  }, [appointments]);
+
+  // Generate reminder message
+  const generateReminderLink = (apt: Appointment) => {
+    const digits = apt.patient_phone.replace(/\D/g, '');
+    const formattedPhone = digits.startsWith('55') ? digits : `55${digits}`;
+    const [year, month, day] = apt.appointment_date.split('-');
+    const formattedDate = `${day}/${month}/${year}`;
+    const formattedTime = apt.appointment_time.slice(0, 5);
+    
+    const message = `📅 *Lembrete de Consulta*
+
+Olá ${apt.patient_name}! 👋
+
+Lembramos que você tem uma consulta agendada para amanhã:
+
+📆 *Data:* ${formattedDate}
+⏰ *Horário:* ${formattedTime}
+🏥 *Profissional:* ${professional?.name}
+
+⚠️ Em caso de imprevisto, por favor avise com antecedência.
+
+Aguardamos você! 😊`;
+
+    return `https://wa.me/${formattedPhone}?text=${encodeURIComponent(message)}`;
+  };
 
   // Chart data for weekly appointments
   const chartData = useMemo(() => {
@@ -748,6 +784,62 @@ Aguardamos você!`;
             )}
           </CardContent>
         </Card>
+
+        {/* Tomorrow's Reminders */}
+        {tomorrowAppointments.length > 0 && (
+          <Card className="border-2 border-yellow-500/20 bg-gradient-to-r from-yellow-500/5 to-transparent">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Bell className="h-5 w-5 text-yellow-500" />
+                Lembretes para Amanhã ({tomorrowAppointments.length})
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-muted-foreground mb-4">
+                Envie lembretes via WhatsApp para os pacientes com consulta amanhã
+              </p>
+              <div className="space-y-3">
+                {tomorrowAppointments.map((apt) => (
+                  <div 
+                    key={apt.id}
+                    className="flex items-center justify-between p-4 rounded-lg border bg-card"
+                  >
+                    <div className="flex items-center gap-4">
+                      <div className="h-10 w-10 rounded-full bg-yellow-500/10 flex items-center justify-center">
+                        <span className="text-sm font-medium text-yellow-600">
+                          {apt.patient_name.charAt(0).toUpperCase()}
+                        </span>
+                      </div>
+                      <div>
+                        <p className="font-medium">{apt.patient_name}</p>
+                        <p className="text-sm text-muted-foreground">
+                          {apt.appointment_time.slice(0, 5)}
+                        </p>
+                      </div>
+                    </div>
+                    {apt.patient_phone && (
+                      <Button 
+                        size="sm" 
+                        variant="outline"
+                        asChild
+                        className="text-yellow-600 border-yellow-200 hover:bg-yellow-50 gap-2"
+                      >
+                        <a 
+                          href={generateReminderLink(apt)} 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                        >
+                          <Send className="h-4 w-4" />
+                          Enviar Lembrete
+                        </a>
+                      </Button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
       </div>
     </FuncionarioLayout>
   );
