@@ -55,7 +55,7 @@ const App = () => (
             <Route
               path="/admin"
               element={
-                <ProtectedRoute allowedRoles={['admin', 'funcionario']}>
+                <ProtectedRoute allowedRoles={['admin']}>
                   <AdminDashboard />
                 </ProtectedRoute>
               }
@@ -63,7 +63,7 @@ const App = () => (
             <Route
               path="/admin/agenda"
               element={
-                <ProtectedRoute allowedRoles={['admin', 'funcionario']}>
+                <ProtectedRoute allowedRoles={['admin']}>
                   <AdminAgenda />
                 </ProtectedRoute>
               }
@@ -71,7 +71,7 @@ const App = () => (
             <Route
               path="/admin/pacientes"
               element={
-                <ProtectedRoute allowedRoles={['admin', 'funcionario']}>
+                <ProtectedRoute allowedRoles={['admin']}>
                   <AdminPatients />
                 </ProtectedRoute>
               }
@@ -95,8 +95,24 @@ const App = () => (
             <Route
               path="/admin/profissionais/:id"
               element={
-                <ProtectedRoute allowedRoles={['admin', 'funcionario']}>
+                <ProtectedRoute allowedRoles={['admin']}>
                   <ProfessionalDashboard />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/relatorios"
+              element={
+                <ProtectedRoute allowedRoles={['admin']}>
+                  <AdminReports />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/configuracoes"
+              element={
+                <ProtectedRoute allowedRoles={['admin']}>
+                  <AdminSettings />
                 </ProtectedRoute>
               }
             />
