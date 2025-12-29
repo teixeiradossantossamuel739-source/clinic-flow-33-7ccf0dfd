@@ -20,6 +20,7 @@ import {
   DollarSign, 
   Clock, 
   User, 
+  Users,
   LogOut,
   Menu,
   Stethoscope
@@ -34,6 +35,7 @@ interface FuncionarioLayoutProps {
 const menuItems = [
   { title: 'Meu Painel', url: '/funcionario', icon: LayoutDashboard },
   { title: 'Minha Agenda', url: '/funcionario/agenda', icon: Calendar },
+  { title: 'Meus Pacientes', url: '/funcionario/pacientes', icon: Users },
   { title: 'Financeiro', url: '/funcionario/financeiro', icon: DollarSign },
   { title: 'Disponibilidade', url: '/funcionario/disponibilidade', icon: Clock },
   { title: 'Meu Perfil', url: '/funcionario/perfil', icon: User },
