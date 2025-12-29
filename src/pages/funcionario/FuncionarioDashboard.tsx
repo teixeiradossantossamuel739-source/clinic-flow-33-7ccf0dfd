@@ -6,6 +6,18 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Progress } from '@/components/ui/progress';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog';
 import { 
   Calendar, 
   DollarSign, 
@@ -14,7 +26,9 @@ import {
   XCircle, 
   TrendingUp,
   Users,
-  MessageCircle
+  MessageCircle,
+  Target,
+  Settings2
 } from 'lucide-react';
 import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, isToday, isTomorrow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -44,12 +58,23 @@ interface Appointment {
   service_id: string | null;
 }
 
+interface FinancialGoal {
+  id: string;
+  professional_id: string;
+  month: number;
+  year: number;
+  goal_amount_cents: number;
+}
+
 export default function FuncionarioDashboard() {
   const { user } = useAuth();
   const [professional, setProfessional] = useState<Professional | null>(null);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState<string | null>(null);
+  const [financialGoal, setFinancialGoal] = useState<FinancialGoal | null>(null);
+  const [goalDialogOpen, setGoalDialogOpen] = useState(false);
+  const [goalInput, setGoalInput] = useState('');
 
   useEffect(() => {
     if (user) {
@@ -81,12 +106,81 @@ export default function FuncionarioDashboard() {
 
         if (aptError) throw aptError;
         setAppointments(aptData || []);
+
+        // Fetch current month's financial goal
+        const now = new Date();
+        const currentMonth = now.getMonth() + 1;
+        const currentYear = now.getFullYear();
+
+        const { data: goalData, error: goalError } = await supabase
+          .from('professional_goals')
+          .select('*')
+          .eq('professional_id', profData.id)
+          .eq('month', currentMonth)
+          .eq('year', currentYear)
+          .maybeSingle();
+
+        if (goalError) {
+          console.error('Error fetching goal:', goalError);
+        } else if (goalData) {
+          setFinancialGoal(goalData);
+          setGoalInput(String(goalData.goal_amount_cents / 100));
+        }
       }
     } catch (error) {
       console.error('Error fetching professional data:', error);
       toast.error('Erro ao carregar dados');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleSaveGoal = async () => {
+    if (!professional) return;
+
+    const amountCents = Math.round(parseFloat(goalInput.replace(',', '.')) * 100);
+    if (isNaN(amountCents) || amountCents <= 0) {
+      toast.error('Digite um valor válido');
+      return;
+    }
+
+    const now = new Date();
+    const currentMonth = now.getMonth() + 1;
+    const currentYear = now.getFullYear();
+
+    try {
+      if (financialGoal) {
+        // Update existing goal
+        const { error } = await supabase
+          .from('professional_goals')
+          .update({ goal_amount_cents: amountCents })
+          .eq('id', financialGoal.id);
+
+        if (error) throw error;
+
+        setFinancialGoal({ ...financialGoal, goal_amount_cents: amountCents });
+      } else {
+        // Insert new goal
+        const { data, error } = await supabase
+          .from('professional_goals')
+          .insert({
+            professional_id: professional.id,
+            month: currentMonth,
+            year: currentYear,
+            goal_amount_cents: amountCents,
+          })
+          .select()
+          .single();
+
+        if (error) throw error;
+        setFinancialGoal(data);
+      }
+
+      toast.success('Meta salva com sucesso!');
+      setGoalDialogOpen(false);
+    } catch (error) {
+      console.error('Error saving goal:', error);
+      toast.error('Erro ao salvar meta');
     }
   };
 
@@ -301,6 +395,19 @@ Aguardamos você!`;
     );
   }
 
+  const goalProgress = useMemo(() => {
+    if (!financialGoal || financialGoal.goal_amount_cents === 0) return 0;
+    return Math.min(100, (stats.monthlyRevenue / financialGoal.goal_amount_cents) * 100);
+  }, [financialGoal, stats.monthlyRevenue]);
+
+  const getProgressColor = (progress: number) => {
+    if (progress >= 100) return 'bg-green-500';
+    if (progress >= 75) return 'bg-emerald-500';
+    if (progress >= 50) return 'bg-yellow-500';
+    if (progress >= 25) return 'bg-orange-500';
+    return 'bg-red-500';
+  };
+
   return (
     <FuncionarioLayout>
       <div className="space-y-6">
@@ -313,6 +420,114 @@ Aguardamos você!`;
             Aqui está o resumo da sua atividade
           </p>
         </div>
+
+        {/* Financial Goal Card */}
+        <Card className="border-2 border-primary/20 bg-gradient-to-r from-primary/5 to-transparent">
+          <CardHeader className="pb-2">
+            <div className="flex items-center justify-between">
+              <CardTitle className="flex items-center gap-2 text-lg">
+                <Target className="h-5 w-5 text-primary" />
+                Meta Financeira - {format(new Date(), 'MMMM yyyy', { locale: ptBR })}
+              </CardTitle>
+              <Dialog open={goalDialogOpen} onOpenChange={setGoalDialogOpen}>
+                <DialogTrigger asChild>
+                  <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                    <Settings2 className="h-4 w-4" />
+                  </Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Configurar Meta Mensal</DialogTitle>
+                    <DialogDescription>
+                      Defina sua meta de faturamento para {format(new Date(), 'MMMM yyyy', { locale: ptBR })}
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div className="py-4">
+                    <Label htmlFor="goal-amount">Valor da Meta (R$)</Label>
+                    <Input
+                      id="goal-amount"
+                      type="number"
+                      placeholder="Ex: 10000"
+                      value={goalInput}
+                      onChange={(e) => setGoalInput(e.target.value)}
+                      className="mt-2"
+                    />
+                  </div>
+                  <DialogFooter>
+                    <Button variant="outline" onClick={() => setGoalDialogOpen(false)}>
+                      Cancelar
+                    </Button>
+                    <Button onClick={handleSaveGoal}>
+                      Salvar Meta
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {financialGoal ? (
+              <div className="space-y-4">
+                <div className="flex items-end justify-between">
+                  <div>
+                    <p className="text-3xl font-bold text-foreground">
+                      {formatCurrency(stats.monthlyRevenue)}
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                      de {formatCurrency(financialGoal.goal_amount_cents)}
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <p className={`text-2xl font-bold ${goalProgress >= 100 ? 'text-green-500' : 'text-foreground'}`}>
+                      {goalProgress.toFixed(0)}%
+                    </p>
+                    {goalProgress >= 100 && (
+                      <Badge className="bg-green-500/10 text-green-600 border-green-500/20">
+                        Meta Atingida! 🎉
+                      </Badge>
+                    )}
+                  </div>
+                </div>
+                <div className="relative">
+                  <div className="h-4 w-full rounded-full bg-secondary overflow-hidden">
+                    <div 
+                      className={`h-full transition-all duration-500 ${getProgressColor(goalProgress)} rounded-full`}
+                      style={{ width: `${goalProgress}%` }}
+                    />
+                  </div>
+                  {/* Milestone markers */}
+                  <div className="absolute top-0 left-1/4 h-4 w-px bg-foreground/20" />
+                  <div className="absolute top-0 left-1/2 h-4 w-px bg-foreground/20" />
+                  <div className="absolute top-0 left-3/4 h-4 w-px bg-foreground/20" />
+                </div>
+                <div className="flex justify-between text-xs text-muted-foreground">
+                  <span>0%</span>
+                  <span>25%</span>
+                  <span>50%</span>
+                  <span>75%</span>
+                  <span>100%</span>
+                </div>
+                {goalProgress < 100 && (
+                  <p className="text-sm text-muted-foreground">
+                    Faltam <span className="font-semibold text-foreground">
+                      {formatCurrency(financialGoal.goal_amount_cents - stats.monthlyRevenue)}
+                    </span> para atingir a meta
+                  </p>
+                )}
+              </div>
+            ) : (
+              <div className="text-center py-4">
+                <p className="text-muted-foreground mb-3">
+                  Nenhuma meta definida para este mês
+                </p>
+                <Button onClick={() => setGoalDialogOpen(true)} variant="outline">
+                  <Target className="h-4 w-4 mr-2" />
+                  Definir Meta
+                </Button>
+              </div>
+            )}
+          </CardContent>
+        </Card>
 
         {/* Stats Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">

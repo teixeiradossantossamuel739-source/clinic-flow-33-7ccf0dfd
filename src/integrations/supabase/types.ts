@@ -89,6 +89,44 @@ export type Database = {
           },
         ]
       }
+      professional_goals: {
+        Row: {
+          created_at: string
+          goal_amount_cents: number
+          id: string
+          month: number
+          professional_id: string
+          updated_at: string
+          year: number
+        }
+        Insert: {
+          created_at?: string
+          goal_amount_cents?: number
+          id?: string
+          month: number
+          professional_id: string
+          updated_at?: string
+          year: number
+        }
+        Update: {
+          created_at?: string
+          goal_amount_cents?: number
+          id?: string
+          month?: number
+          professional_id?: string
+          updated_at?: string
+          year?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "professional_goals_professional_id_fkey"
+            columns: ["professional_id"]
+            isOneToOne: false
+            referencedRelation: "professionals"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       professional_schedules: {
         Row: {
           created_at: string
