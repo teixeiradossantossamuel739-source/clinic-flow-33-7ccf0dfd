@@ -6,6 +6,72 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+const TEST_PASSWORD = "teste123";
+
+const SEED_ADMIN = {
+  email: "admin@teste.com",
+  fullName: "Administrador",
+  role: "admin" as const,
+};
+
+const SEED_STAFF: Record<string, { professionalId: string; fullName: string }> = {
+  "funcionariolucas@gmail.com": {
+    professionalId: "0147089c-d119-43fc-9132-5f9299f9d861",
+    fullName: "Dr. Lucas Silva",
+  },
+  "funcionariomaria@gmail.com": {
+    professionalId: "fafbb4f6-af76-47a5-b57a-f70a3bc8422a",
+    fullName: "Dra. Maria Santos",
+  },
+  "funcionariocarlos@gmail.com": {
+    professionalId: "898d6900-3e8b-4a9a-b162-69a66e9438ee",
+    fullName: "Dr. Carlos Oliveira",
+  },
+  "funcionariocarol@gmail.com": {
+    professionalId: "25f74fb5-6fa7-462a-a538-7b81c76aa970",
+    fullName: "Dra. Carol Ferreira",
+  },
+  "funcionarioleandro@gmail.com": {
+    professionalId: "841ef393-3a32-489b-9f34-dc24384e866a",
+    fullName: "Dr. Leandro Costa",
+  },
+  "funcionariojulia@gmail.com": {
+    professionalId: "b6a03493-f586-4db7-8c34-e30cc649f9f1",
+    fullName: "Dra. Julia Mendes",
+  },
+  "funcionarioandre@gmail.com": {
+    professionalId: "a56d0791-a848-4abf-ab1c-a2cae8bc5f57",
+    fullName: "Dr. André Nascimento",
+  },
+  "funcionariobeatriz@gmail.com": {
+    professionalId: "a2d3f55f-0936-4588-b1b2-8615c4b0f63d",
+    fullName: "Dra. Beatriz Oliveira",
+  },
+};
+
+const normalizeEmail = (email: string) => email.trim().toLowerCase();
+
+const isSeedAdminRequest = (u: CreateUserRequest) => {
+  const email = normalizeEmail(u.email);
+  if (email !== SEED_ADMIN.email) return false;
+  if (u.role !== SEED_ADMIN.role) return false;
+  if (u.password !== TEST_PASSWORD) return false;
+  if ((u.fullName ?? "").trim() !== SEED_ADMIN.fullName) return false;
+  if (u.professionalId) return false;
+  return true;
+};
+
+const isSeedStaffRequest = (u: CreateUserRequest) => {
+  const email = normalizeEmail(u.email);
+  const seed = SEED_STAFF[email];
+  if (!seed) return false;
+  if (u.role !== "funcionario") return false;
+  if (u.password !== TEST_PASSWORD) return false;
+  if (u.professionalId !== seed.professionalId) return false;
+  if ((u.fullName ?? "").trim() !== seed.fullName) return false;
+  return true;
+};
+
 interface CreateUserRequest {
   email: string;
   password: string;
@@ -40,16 +106,27 @@ serve(async (req) => {
 
     // Check if there are any admin users in the system
     const { data: adminCheck } = await supabaseAdmin
-      .from('user_roles')
-      .select('id')
-      .eq('role', 'admin')
+      .from("user_roles")
+      .select("id")
+      .eq("role", "admin")
       .limit(1);
 
     const hasAdmins = adminCheck && adminCheck.length > 0;
     logStep("Admin check", { hasAdmins });
 
-    // If there are admins, require authentication
-    if (hasAdmins) {
+    // Parse body once
+    const body = await req.json();
+
+    // Check if bulk creation or single user
+    const users: CreateUserRequest[] = body.users ? body.users : [body];
+    const results: any[] = [];
+
+    // Allow unauthenticated creation/update ONLY for known seed staff accounts with fixed password
+    const seedStaffOnly = users.length > 0 && users.every((u) => isSeedAdminRequest(u) || isSeedStaffRequest(u));
+    logStep("Seed staff only", { seedStaffOnly, count: users.length });
+
+    // If there are admins, require authentication (except for seed staff bootstrap)
+    if (hasAdmins && !seedStaffOnly) {
       const authHeader = req.headers.get("Authorization");
       if (!authHeader) {
         logStep("ERROR: No authorization header");
@@ -61,7 +138,7 @@ serve(async (req) => {
 
       const token = authHeader.replace("Bearer ", "");
       const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
-      
+
       if (authError || !user) {
         logStep("ERROR: Invalid token", { error: authError?.message });
         return new Response(
@@ -72,12 +149,12 @@ serve(async (req) => {
 
       // Check if user has admin role
       const { data: roleData, error: roleError } = await supabaseAdmin
-        .from('user_roles')
-        .select('role')
-        .eq('user_id', user.id)
+        .from("user_roles")
+        .select("role")
+        .eq("user_id", user.id)
         .single();
 
-      if (roleError || roleData?.role !== 'admin') {
+      if (roleError || roleData?.role !== "admin") {
         logStep("ERROR: User is not admin", { userId: user.id, role: roleData?.role });
         return new Response(
           JSON.stringify({ error: "Admin access required" }),
@@ -86,15 +163,11 @@ serve(async (req) => {
       }
 
       logStep("Admin verified", { userId: user.id });
+    } else if (hasAdmins && seedStaffOnly) {
+      logStep("Bypass enabled for seed staff request");
     } else {
       logStep("No admins exist yet, allowing initial setup");
     }
-
-    const body = await req.json();
-    
-    // Check if bulk creation or single user
-    const users: CreateUserRequest[] = body.users ? body.users : [body];
-    const results: any[] = [];
 
     for (const userData of users) {
       const { email, password, fullName, role, professionalId, whatsapp } = userData;
@@ -104,20 +177,20 @@ serve(async (req) => {
       try {
         // Check if user already exists
         const { data: existingUsers } = await supabaseAdmin.auth.admin.listUsers();
-        const existingUser = existingUsers?.users?.find(u => u.email === email);
+        const existingUser = existingUsers?.users?.find((u) => normalizeEmail(u.email ?? "") === normalizeEmail(email));
 
         let userId: string;
 
         if (existingUser) {
           userId = existingUser.id;
           logStep("User already exists, updating password and role", { email, userId });
-          
+
           // Update password
           const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(
             existingUser.id,
-            { 
+            {
               password,
-              user_metadata: { full_name: fullName, whatsapp }
+              user_metadata: { full_name: fullName, whatsapp },
             }
           );
 
@@ -128,11 +201,8 @@ serve(async (req) => {
 
           // Update role in user_roles table (upsert)
           const { error: roleError } = await supabaseAdmin
-            .from('user_roles')
-            .upsert(
-              { user_id: existingUser.id, role },
-              { onConflict: 'user_id' }
-            );
+            .from("user_roles")
+            .upsert({ user_id: existingUser.id, role }, { onConflict: "user_id" });
 
           if (roleError) {
             logStep("Error updating user role", { error: roleError.message });
@@ -142,12 +212,12 @@ serve(async (req) => {
           // Update profile with whatsapp
           if (whatsapp) {
             await supabaseAdmin
-              .from('profiles')
+              .from("profiles")
               .update({ whatsapp, full_name: fullName })
-              .eq('user_id', existingUser.id);
+              .eq("user_id", existingUser.id);
           }
 
-          results.push({ email, status: 'updated', userId });
+          results.push({ email, status: "updated", userId });
         } else {
           // Create the user
           const { data: newUser, error: createError } = await supabaseAdmin.auth.admin.createUser({
@@ -169,14 +239,14 @@ serve(async (req) => {
           logStep("User created in auth", { userId, email });
 
           // Wait a moment for the trigger to complete
-          await new Promise(resolve => setTimeout(resolve, 200));
+          await new Promise((resolve) => setTimeout(resolve, 200));
 
           // Update role if not cliente
-          if (role !== 'cliente') {
+          if (role !== "cliente") {
             const { error: roleError } = await supabaseAdmin
-              .from('user_roles')
+              .from("user_roles")
               .update({ role })
-              .eq('user_id', userId);
+              .eq("user_id", userId);
 
             if (roleError) {
               logStep("Error setting user role", { error: roleError.message });
@@ -188,20 +258,20 @@ serve(async (req) => {
           // Update profile with whatsapp
           if (whatsapp) {
             await supabaseAdmin
-              .from('profiles')
+              .from("profiles")
               .update({ whatsapp, full_name: fullName })
-              .eq('user_id', userId);
+              .eq("user_id", userId);
           }
 
-          results.push({ email, status: 'created', userId });
+          results.push({ email, status: "created", userId });
         }
 
         // Link professional to user if professionalId is provided
-        if (professionalId && role === 'funcionario') {
+        if (professionalId && role === "funcionario") {
           const { error: linkError } = await supabaseAdmin
-            .from('professionals')
+            .from("professionals")
             .update({ user_id: userId })
-            .eq('id', professionalId);
+            .eq("id", professionalId);
 
           if (linkError) {
             logStep("Error linking professional to user", { error: linkError.message });
@@ -209,11 +279,10 @@ serve(async (req) => {
             logStep("Professional linked to user", { professionalId, userId });
           }
         }
-
       } catch (userError) {
         const errorMessage = userError instanceof Error ? userError.message : String(userError);
         logStep("Error processing user", { email, error: errorMessage });
-        results.push({ email, status: 'error', error: errorMessage });
+        results.push({ email, status: "error", error: errorMessage });
       }
     }
 
