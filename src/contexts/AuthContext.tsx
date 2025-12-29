@@ -39,7 +39,47 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [role, setRole] = useState<AppRole | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const fetchUserData = async (userId: string) => {
+  // Auto-link professional by email if exists without user_id
+  const autoLinkProfessional = async (userId: string, userEmail: string) => {
+    try {
+      // Check if there's a professional with same email but no user_id linked
+      const { data: professional } = await supabase
+        .from('professionals')
+        .select('id, user_id, email')
+        .eq('email', userEmail.toLowerCase())
+        .is('user_id', null)
+        .maybeSingle();
+
+      if (professional) {
+        // Link the professional to this user
+        await supabase
+          .from('professionals')
+          .update({ user_id: userId })
+          .eq('id', professional.id);
+        
+        // Also update user role to funcionario if not already
+        const { data: existingRole } = await supabase.rpc('get_user_role', { _user_id: userId });
+        
+        if (existingRole !== 'funcionario' && existingRole !== 'admin') {
+          await supabase
+            .from('user_roles')
+            .update({ role: 'funcionario' })
+            .eq('user_id', userId);
+        }
+        
+        console.log('Profissional vinculado automaticamente:', professional.email);
+      }
+    } catch (error) {
+      console.error('Erro ao vincular profissional:', error);
+    }
+  };
+
+  const fetchUserData = async (userId: string, userEmail?: string) => {
+    // Auto-link professional by email if applicable
+    if (userEmail) {
+      await autoLinkProfessional(userId, userEmail);
+    }
+
     // Fetch profile
     const { data: profileData } = await supabase
       .from('profiles')
@@ -51,7 +91,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setProfile(profileData as Profile);
     }
 
-    // Fetch role using RPC
+    // Fetch role using RPC (fetch fresh role after potential update)
     const { data: roleData } = await supabase.rpc('get_user_role', { _user_id: userId });
     
     if (roleData) {
@@ -69,7 +109,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // Defer Supabase calls with setTimeout
         if (session?.user) {
           setTimeout(() => {
-            fetchUserData(session.user.id);
+            fetchUserData(session.user.id, session.user.email);
           }, 0);
         } else {
           setProfile(null);
@@ -89,7 +129,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(session?.user ?? null);
       
       if (session?.user) {
-        fetchUserData(session.user.id).finally(() => {
+        fetchUserData(session.user.id, session.user.email).finally(() => {
           setLoading(false);
         });
       } else {
