@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useTheme } from 'next-themes';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { FuncionarioLayout } from '@/components/layout/FuncionarioLayout';
@@ -8,25 +9,19 @@ import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Separator } from '@/components/ui/separator';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import { 
   Bell, 
-  BellRing, 
   MessageSquare, 
   Volume2, 
   Sun, 
   Moon, 
   Monitor,
   Save,
-  CheckCircle2
+  CheckCircle2,
+  Sparkles
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { cn } from '@/lib/utils';
 
 interface Preferences {
   id?: string;
@@ -52,8 +47,95 @@ const defaultPreferences: Omit<Preferences, 'professional_id'> = {
   theme_preference: 'system',
 };
 
+interface ThemeCardProps {
+  value: string;
+  label: string;
+  icon: React.ReactNode;
+  isSelected: boolean;
+  onClick: () => void;
+  previewBg: string;
+  previewFg: string;
+}
+
+function ThemeCard({ value, label, icon, isSelected, onClick, previewBg, previewFg }: ThemeCardProps) {
+  return (
+    <button
+      onClick={onClick}
+      className={cn(
+        "relative flex flex-col items-center gap-3 p-4 rounded-xl border-2 transition-all duration-300 group overflow-hidden",
+        "hover:scale-[1.02] active:scale-[0.98]",
+        isSelected 
+          ? "border-primary bg-primary/5 shadow-lg shadow-primary/20" 
+          : "border-border/50 bg-card hover:border-primary/50 hover:bg-accent/50"
+      )}
+    >
+      {/* Glow effect when selected */}
+      {isSelected && (
+        <div className="absolute inset-0 bg-gradient-to-br from-primary/10 via-transparent to-primary/5 animate-pulse" />
+      )}
+      
+      {/* Animated corner sparkles */}
+      {isSelected && (
+        <>
+          <Sparkles className="absolute top-1 right-1 h-3 w-3 text-primary/60 animate-pulse" />
+          <Sparkles className="absolute bottom-1 left-1 h-3 w-3 text-primary/40 animate-pulse" style={{ animationDelay: '0.5s' }} />
+        </>
+      )}
+      
+      {/* Icon with animation */}
+      <div className={cn(
+        "relative z-10 p-3 rounded-full transition-all duration-300",
+        isSelected 
+          ? "bg-primary text-primary-foreground shadow-lg shadow-primary/30" 
+          : "bg-muted text-muted-foreground group-hover:bg-primary/20 group-hover:text-primary"
+      )}>
+        <div className={cn(
+          "transition-transform duration-500",
+          isSelected && value === 'light' && "animate-spin",
+          isSelected && value === 'dark' && "animate-pulse",
+          isSelected && value === 'system' && "animate-bounce"
+        )} style={{ animationDuration: value === 'light' ? '3s' : '2s' }}>
+          {icon}
+        </div>
+      </div>
+      
+      {/* Label */}
+      <span className={cn(
+        "relative z-10 font-medium text-sm transition-colors duration-300",
+        isSelected ? "text-primary" : "text-muted-foreground group-hover:text-foreground"
+      )}>
+        {label}
+      </span>
+      
+      {/* Preview mini screen */}
+      <div className={cn(
+        "relative z-10 w-full h-12 rounded-lg border overflow-hidden transition-all duration-300",
+        isSelected ? "border-primary/30 shadow-inner" : "border-border/30"
+      )} style={{ backgroundColor: previewBg }}>
+        {/* Mini header */}
+        <div className="h-2 w-full flex items-center gap-0.5 px-1" style={{ backgroundColor: previewFg + '20' }}>
+          <div className="w-1 h-1 rounded-full" style={{ backgroundColor: previewFg + '40' }} />
+          <div className="w-1 h-1 rounded-full" style={{ backgroundColor: previewFg + '40' }} />
+          <div className="w-1 h-1 rounded-full" style={{ backgroundColor: previewFg + '40' }} />
+        </div>
+        {/* Mini content lines */}
+        <div className="p-1.5 space-y-1">
+          <div className="h-1.5 w-3/4 rounded" style={{ backgroundColor: previewFg + '30' }} />
+          <div className="h-1.5 w-1/2 rounded" style={{ backgroundColor: previewFg + '20' }} />
+        </div>
+      </div>
+      
+      {/* Selection indicator */}
+      {isSelected && (
+        <div className="absolute -bottom-px left-1/2 -translate-x-1/2 w-8 h-1 bg-primary rounded-t-full" />
+      )}
+    </button>
+  );
+}
+
 export default function FuncionarioConfiguracoes() {
   const { user } = useAuth();
+  const { theme, setTheme } = useTheme();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [professionalId, setProfessionalId] = useState<string | null>(null);
@@ -93,6 +175,10 @@ export default function FuncionarioConfiguracoes() {
 
         if (prefData) {
           setPreferences(prefData);
+          // Sync theme with saved preference
+          if (prefData.theme_preference) {
+            setTheme(prefData.theme_preference);
+          }
         } else {
           // Set defaults
           setPreferences({
@@ -113,6 +199,13 @@ export default function FuncionarioConfiguracoes() {
     if (!preferences) return;
     setPreferences({ ...preferences, [key]: value });
     setHasChanges(true);
+  };
+
+  const handleThemeChange = (newTheme: string) => {
+    // Apply theme immediately
+    setTheme(newTheme);
+    // Update preference state
+    updatePreference('theme_preference', newTheme);
   };
 
   const handleSave = async () => {
@@ -195,6 +288,8 @@ export default function FuncionarioConfiguracoes() {
     );
   }
 
+  const currentTheme = preferences?.theme_preference ?? 'system';
+
   return (
     <FuncionarioLayout>
       <div className="space-y-6 max-w-2xl mx-auto">
@@ -228,6 +323,61 @@ export default function FuncionarioConfiguracoes() {
             )}
           </Button>
         </div>
+
+        {/* Appearance Settings - Moved to top for prominence */}
+        <Card className="relative overflow-hidden">
+          {/* Subtle gradient background */}
+          <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-accent/5 pointer-events-none" />
+          
+          <CardHeader className="relative">
+            <CardTitle className="flex items-center gap-2">
+              <div className="p-2 rounded-lg bg-gradient-to-br from-yellow-400 to-orange-500 text-white">
+                <Sparkles className="h-5 w-5" />
+              </div>
+              Aparência
+            </CardTitle>
+            <CardDescription>
+              Personalize a aparência da interface
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="relative">
+            <div className="space-y-4">
+              <Label className="text-base">Escolha seu tema</Label>
+              <div className="grid grid-cols-3 gap-4">
+                <ThemeCard
+                  value="light"
+                  label="Claro"
+                  icon={<Sun className="h-5 w-5" />}
+                  isSelected={currentTheme === 'light'}
+                  onClick={() => handleThemeChange('light')}
+                  previewBg="#ffffff"
+                  previewFg="#1a1a2e"
+                />
+                <ThemeCard
+                  value="dark"
+                  label="Escuro"
+                  icon={<Moon className="h-5 w-5" />}
+                  isSelected={currentTheme === 'dark'}
+                  onClick={() => handleThemeChange('dark')}
+                  previewBg="#1a1a2e"
+                  previewFg="#ffffff"
+                />
+                <ThemeCard
+                  value="system"
+                  label="Sistema"
+                  icon={<Monitor className="h-5 w-5" />}
+                  isSelected={currentTheme === 'system'}
+                  onClick={() => handleThemeChange('system')}
+                  previewBg="linear-gradient(135deg, #ffffff 50%, #1a1a2e 50%)"
+                  previewFg="#888888"
+                />
+              </div>
+              <p className="text-xs text-muted-foreground text-center pt-2">
+                O tema é aplicado instantaneamente. Clique em "Salvar" para manter a preferência.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
 
         {/* Notification Settings */}
         <Card>
@@ -364,57 +514,6 @@ export default function FuncionarioConfiguracoes() {
                 checked={preferences?.whatsapp_auto_message ?? false}
                 onCheckedChange={(checked) => updatePreference('whatsapp_auto_message', checked)}
               />
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Appearance Settings */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Sun className="h-5 w-5 text-yellow-500" />
-              Aparência
-            </CardTitle>
-            <CardDescription>
-              Personalize a aparência da interface
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="flex items-center justify-between">
-              <div className="space-y-0.5">
-                <Label htmlFor="theme" className="text-base">Tema</Label>
-                <p className="text-sm text-muted-foreground">
-                  Escolha o tema de cores da interface
-                </p>
-              </div>
-              <Select
-                value={preferences?.theme_preference ?? 'system'}
-                onValueChange={(value) => updatePreference('theme_preference', value)}
-              >
-                <SelectTrigger className="w-40">
-                  <SelectValue placeholder="Selecione" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="light">
-                    <div className="flex items-center gap-2">
-                      <Sun className="h-4 w-4" />
-                      Claro
-                    </div>
-                  </SelectItem>
-                  <SelectItem value="dark">
-                    <div className="flex items-center gap-2">
-                      <Moon className="h-4 w-4" />
-                      Escuro
-                    </div>
-                  </SelectItem>
-                  <SelectItem value="system">
-                    <div className="flex items-center gap-2">
-                      <Monitor className="h-4 w-4" />
-                      Sistema
-                    </div>
-                  </SelectItem>
-                </SelectContent>
-              </Select>
             </div>
           </CardContent>
         </Card>
