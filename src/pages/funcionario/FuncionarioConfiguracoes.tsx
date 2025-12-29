@@ -222,10 +222,15 @@ export default function FuncionarioConfiguracoes() {
         }
 
         if (prefData) {
-          setPreferences(prefData);
+          // Normalize old "system" preference into one of our 3 supported themes
+          const normalizedTheme =
+            prefData.theme_preference === 'system' ? 'dark' : prefData.theme_preference;
+
+          setPreferences({ ...prefData, theme_preference: normalizedTheme });
+
           // Sync theme with saved preference
-          if (prefData.theme_preference) {
-            setTheme(prefData.theme_preference);
+          if (normalizedTheme) {
+            setTheme(normalizedTheme);
           }
         } else {
           // Set defaults
@@ -336,7 +341,7 @@ export default function FuncionarioConfiguracoes() {
     );
   }
 
-  const currentTheme = preferences?.theme_preference ?? 'system';
+  const currentTheme = preferences?.theme_preference ?? 'light';
 
   return (
     <FuncionarioLayout>

@@ -226,6 +226,16 @@
     font-feature-settings: "cv02", "cv03", "cv04", "cv11";
   }
 
+  /* Make Futuristic visually distinct from Dark via background atmosphere */
+  .futuristic body {
+    background-image:
+      radial-gradient(1100px circle at 15% 10%, hsl(185 80% 55% / 0.16), transparent 55%),
+      radial-gradient(900px circle at 85% 20%, hsl(270 70% 55% / 0.14), transparent 55%),
+      radial-gradient(700px circle at 60% 90%, hsl(200 90% 60% / 0.08), transparent 55%);
+    background-attachment: fixed;
+    background-repeat: no-repeat;
+  }
+
   h1, h2, h3, h4, h5, h6 {
     @apply font-semibold tracking-tight text-foreground;
   }
