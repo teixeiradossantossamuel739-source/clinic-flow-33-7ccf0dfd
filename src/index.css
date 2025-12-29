@@ -144,6 +144,71 @@
     --gradient-surface: linear-gradient(180deg, hsl(220 20% 10%) 0%, hsl(220 20% 8%) 100%);
     --gradient-hero: linear-gradient(135deg, hsl(220 20% 8%) 0%, hsl(197 30% 15%) 50%, hsl(220 20% 10%) 100%);
   }
+
+  /* Futuristic Theme - Cyberpunk style with deep blue, purple and cyan */
+  .futuristic {
+    --background: 230 40% 8%;
+    --foreground: 220 80% 92%;
+
+    --card: 230 45% 12%;
+    --card-foreground: 220 80% 92%;
+
+    --popover: 230 45% 12%;
+    --popover-foreground: 220 80% 92%;
+
+    --primary: 185 80% 55%;
+    --primary-foreground: 230 40% 8%;
+
+    --secondary: 270 60% 50%;
+    --secondary-foreground: 0 0% 100%;
+
+    --muted: 230 40% 16%;
+    --muted-foreground: 260 40% 70%;
+
+    --accent: 270 70% 60%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 72% 55%;
+    --destructive-foreground: 0 0% 100%;
+
+    --success: 160 70% 45%;
+    --success-foreground: 0 0% 100%;
+
+    --warning: 38 92% 50%;
+    --warning-foreground: 230 40% 8%;
+
+    --border: 250 50% 25%;
+    --input: 250 50% 20%;
+    --ring: 185 80% 55%;
+
+    --sidebar-background: 230 45% 6%;
+    --sidebar-foreground: 260 60% 85%;
+    --sidebar-primary: 185 80% 55%;
+    --sidebar-primary-foreground: 230 40% 8%;
+    --sidebar-accent: 270 50% 20%;
+    --sidebar-accent-foreground: 260 60% 90%;
+    --sidebar-border: 250 50% 22%;
+    --sidebar-ring: 185 80% 55%;
+
+    --clinic-primary: 185 80% 55%;
+    --clinic-primary-light: 185 70% 30%;
+    --clinic-primary-dark: 185 80% 65%;
+    --clinic-surface: 230 45% 10%;
+    --clinic-surface-elevated: 230 45% 14%;
+    --clinic-text-primary: 260 60% 92%;
+    --clinic-text-secondary: 260 50% 75%;
+    --clinic-text-muted: 260 40% 55%;
+    --clinic-border-subtle: 250 50% 20%;
+    --clinic-border-default: 250 50% 28%;
+    --clinic-shadow: 260 80% 15%;
+
+    --gradient-primary: linear-gradient(135deg, hsl(185 80% 55%) 0%, hsl(270 70% 55%) 100%);
+    --gradient-surface: linear-gradient(180deg, hsl(230 45% 12%) 0%, hsl(230 40% 8%) 100%);
+    --gradient-hero: linear-gradient(135deg, hsl(230 40% 8%) 0%, hsl(260 50% 15%) 50%, hsl(230 45% 10%) 100%);
+
+    /* Futuristic glow effects */
+    --shadow-glow: 0 0 30px hsl(185 80% 55% / 0.25), 0 0 60px hsl(270 70% 55% / 0.15);
+  }
 }
 
 @layer base {
