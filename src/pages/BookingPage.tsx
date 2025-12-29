@@ -97,6 +97,15 @@ interface ExistingAppointment {
   status: string;
 }
 
+interface BlockedTime {
+  id: string;
+  professional_id: string;
+  block_date: string;
+  start_time: string | null;
+  end_time: string | null;
+  reason: string | null;
+}
+
 export default function BookingPage() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
@@ -109,6 +118,7 @@ export default function BookingPage() {
   const [professionals, setProfessionals] = useState<Professional[]>([]);
   const [schedules, setSchedules] = useState<ProfessionalSchedule[]>([]);
   const [existingAppointments, setExistingAppointments] = useState<ExistingAppointment[]>([]);
+  const [blockedTimes, setBlockedTimes] = useState<BlockedTime[]>([]);
   const [loading, setLoading] = useState(true);
   
   const [booking, setBooking] = useState<BookingData>({
@@ -130,10 +140,10 @@ export default function BookingPage() {
     }
   }, [canceled]);
 
-  // Fetch services, professionals, schedules and existing appointments
+  // Fetch services, professionals, schedules, existing appointments and blocked times
   useEffect(() => {
     async function fetchData() {
-      const [servicesRes, professionalsRes, schedulesRes, appointmentsRes] = await Promise.all([
+      const [servicesRes, professionalsRes, schedulesRes, appointmentsRes, blockedRes] = await Promise.all([
         supabase.from('services').select('*').eq('is_active', true),
         supabase.from('professionals').select('*').eq('is_active', true),
         supabase.from('professional_schedules').select('*').eq('is_active', true),
@@ -141,6 +151,9 @@ export default function BookingPage() {
           .from('appointments')
           .select('id, professional_id, professional_uuid, appointment_date, appointment_time, status')
           .not('status', 'eq', 'cancelled'),
+        supabase
+          .from('professional_blocked_times')
+          .select('id, professional_id, block_date, start_time, end_time, reason'),
       ]);
       
       if (servicesRes.error) {
@@ -167,6 +180,12 @@ export default function BookingPage() {
         console.error('Error fetching existing appointments:', appointmentsRes.error);
       } else {
         setExistingAppointments(appointmentsRes.data || []);
+      }
+
+      if (blockedRes.error) {
+        console.error('Error fetching blocked times:', blockedRes.error);
+      } else {
+        setBlockedTimes(blockedRes.data || []);
       }
 
       setLoading(false);
@@ -228,6 +247,23 @@ export default function BookingPage() {
       )
       .map((apt) => apt.appointment_time.slice(0, 5)); // Get HH:MM format
 
+    // Get blocked times for this professional on this date
+    const blockedForDate = blockedTimes.filter(
+      (bt) => bt.professional_id === booking.professionalId && bt.block_date === booking.date
+    );
+
+    // Helper function to check if a time slot is blocked
+    const isTimeBlocked = (time: string): boolean => {
+      return blockedForDate.some((bt) => {
+        // Full day block
+        if (!bt.start_time && !bt.end_time) return true;
+        // Specific time block
+        const blockStart = bt.start_time?.slice(0, 5) || '00:00';
+        const blockEnd = bt.end_time?.slice(0, 5) || '23:59';
+        return time >= blockStart && time < blockEnd;
+      });
+    };
+
     // Check if selected date is today to filter past time slots
     const now = new Date();
     const isTodayDate = isSameDay(selectedDate, now);
@@ -240,13 +276,14 @@ export default function BookingPage() {
       const min = m % 60;
       const time = `${hour.toString().padStart(2, '0')}:${min.toString().padStart(2, '0')}`;
       const isBooked = bookedTimes.includes(time);
+      const isBlocked = isTimeBlocked(time);
       // If today, also check if the slot time has already passed
       const isPastSlot = isTodayDate && m < minAllowedMinutes;
-      slots.push({ id: `slot-${time}`, time, available: !isBooked && !isPastSlot });
+      slots.push({ id: `slot-${time}`, time, available: !isBooked && !isPastSlot && !isBlocked });
     }
 
     return slots;
-  }, [booking.date, booking.professionalId, professionalSchedules, existingAppointments]);
+  }, [booking.date, booking.professionalId, professionalSchedules, existingAppointments, blockedTimes]);
 
   const handleSelectService = (id: string) => {
     setBooking((prev) => ({ ...prev, serviceId: id, professionalId: null }));

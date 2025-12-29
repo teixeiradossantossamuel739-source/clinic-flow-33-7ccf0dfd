@@ -6,6 +6,9 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Textarea } from '@/components/ui/textarea';
+import { Label } from '@/components/ui/label';
+import { Switch } from '@/components/ui/switch';
 import { 
   Calendar, 
   Clock, 
@@ -14,7 +17,9 @@ import {
   Mail,
   ChevronLeft,
   ChevronRight,
-  FileText
+  FileText,
+  Ban,
+  Unlock
 } from 'lucide-react';
 import { format, addDays, startOfWeek, isSameDay } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -53,7 +58,15 @@ interface Schedule {
   is_active: boolean;
 }
 
-type SlotStatus = 'available' | 'pending' | 'awaiting_payment' | 'confirmed' | 'completed' | 'cancelled' | 'unavailable';
+interface BlockedTime {
+  id: string;
+  block_date: string;
+  start_time: string | null;
+  end_time: string | null;
+  reason: string | null;
+}
+
+type SlotStatus = 'available' | 'pending' | 'awaiting_payment' | 'confirmed' | 'completed' | 'cancelled' | 'unavailable' | 'blocked';
 
 const STATUS_COLORS: Record<SlotStatus, string> = {
   available: 'bg-emerald-500 hover:bg-emerald-600',
@@ -63,6 +76,7 @@ const STATUS_COLORS: Record<SlotStatus, string> = {
   completed: 'bg-muted hover:bg-muted/80',
   cancelled: 'bg-transparent border border-dashed border-muted-foreground/30',
   unavailable: 'bg-transparent',
+  blocked: 'bg-slate-600 hover:bg-slate-700',
 };
 
 const STATUS_LABELS: Record<SlotStatus, string> = {
@@ -73,6 +87,7 @@ const STATUS_LABELS: Record<SlotStatus, string> = {
   completed: 'Realizado',
   cancelled: 'Cancelado',
   unavailable: '',
+  blocked: '🚫 Bloqueado',
 };
 
 export default function FuncionarioAgenda() {
@@ -80,10 +95,17 @@ export default function FuncionarioAgenda() {
   const [professionalId, setProfessionalId] = useState<string | null>(null);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [schedules, setSchedules] = useState<Schedule[]>([]);
+  const [blockedTimes, setBlockedTimes] = useState<BlockedTime[]>([]);
   const [loading, setLoading] = useState(true);
   const [weekStart, setWeekStart] = useState(() => startOfWeek(new Date(), { weekStartsOn: 1 }));
-  const [selectedSlot, setSelectedSlot] = useState<{ date: Date; time: string; appointment?: Appointment } | null>(null);
+  const [selectedSlot, setSelectedSlot] = useState<{ date: Date; time: string; appointment?: Appointment; blockedTime?: BlockedTime } | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
+  
+  // Block dialog state
+  const [blockDialogOpen, setBlockDialogOpen] = useState(false);
+  const [blockReason, setBlockReason] = useState('');
+  const [blockFullDay, setBlockFullDay] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   const weekDays = useMemo(() => {
     return Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
@@ -127,6 +149,7 @@ export default function FuncionarioAgenda() {
   useEffect(() => {
     if (professionalId) {
       fetchAppointments();
+      fetchBlockedTimes();
     }
   }, [professionalId, weekStart]);
 
@@ -209,6 +232,42 @@ export default function FuncionarioAgenda() {
     }
   }
 
+  async function fetchBlockedTimes() {
+    if (!professionalId) return;
+
+    try {
+      const weekEnd = addDays(weekStart, 6);
+      const startDate = format(weekStart, 'yyyy-MM-dd');
+      const endDate = format(weekEnd, 'yyyy-MM-dd');
+
+      const { data, error } = await supabase
+        .from('professional_blocked_times')
+        .select('*')
+        .eq('professional_id', professionalId)
+        .gte('block_date', startDate)
+        .lte('block_date', endDate);
+
+      if (error) throw error;
+      setBlockedTimes(data || []);
+    } catch (error) {
+      console.error('Error fetching blocked times:', error);
+    }
+  }
+
+  function getBlockedTimeForSlot(date: Date, time: string): BlockedTime | undefined {
+    const dateStr = format(date, 'yyyy-MM-dd');
+    return blockedTimes.find(bt => {
+      if (bt.block_date !== dateStr) return false;
+      // Full day block
+      if (!bt.start_time && !bt.end_time) return true;
+      // Specific time block
+      const slotTime = time;
+      const blockStart = bt.start_time?.substring(0, 5) || '00:00';
+      const blockEnd = bt.end_time?.substring(0, 5) || '23:59';
+      return slotTime >= blockStart && slotTime < blockEnd;
+    });
+  }
+
   function getSlotStatus(date: Date, time: string): SlotStatus {
     const dayOfWeek = date.getDay();
     const schedule = schedules.find(s => s.day_of_week === dayOfWeek && s.is_active);
@@ -220,6 +279,10 @@ export default function FuncionarioAgenda() {
     const endValue = schedule.end_time.substring(0, 5).replace(':', '');
     
     if (timeValue < startValue || timeValue >= endValue) return 'unavailable';
+
+    // Check blocked times
+    const blockedTime = getBlockedTimeForSlot(date, time);
+    if (blockedTime) return 'blocked';
 
     const appointment = appointments.find(apt => {
       const aptDate = parseLocalDate(apt.appointment_date);
@@ -256,8 +319,75 @@ export default function FuncionarioAgenda() {
     if (status === 'unavailable') return;
 
     const appointment = getAppointmentForSlot(date, time);
-    setSelectedSlot({ date, time, appointment });
+    const blockedTime = getBlockedTimeForSlot(date, time);
+    
+    setSelectedSlot({ date, time, appointment, blockedTime });
     setDialogOpen(true);
+  }
+
+  function handleOpenBlockDialog() {
+    setBlockReason('');
+    setBlockFullDay(false);
+    setDialogOpen(false);
+    setBlockDialogOpen(true);
+  }
+
+  async function handleBlockTime() {
+    if (!professionalId || !selectedSlot) return;
+
+    setSaving(true);
+    try {
+      const blockDate = format(selectedSlot.date, 'yyyy-MM-dd');
+      
+      const insertData: any = {
+        professional_id: professionalId,
+        block_date: blockDate,
+        reason: blockReason.trim() || null,
+      };
+
+      if (!blockFullDay) {
+        insertData.start_time = selectedSlot.time;
+        // Block 30 min slot
+        const [h, m] = selectedSlot.time.split(':').map(Number);
+        const endMinutes = h * 60 + m + 30;
+        const endH = Math.floor(endMinutes / 60);
+        const endM = endMinutes % 60;
+        insertData.end_time = `${String(endH).padStart(2, '0')}:${String(endM).padStart(2, '0')}`;
+      }
+
+      const { error } = await supabase
+        .from('professional_blocked_times')
+        .insert(insertData);
+
+      if (error) throw error;
+
+      toast.success(blockFullDay ? 'Dia inteiro bloqueado!' : 'Horário bloqueado!');
+      setBlockDialogOpen(false);
+      fetchBlockedTimes();
+    } catch (error) {
+      console.error('Error blocking time:', error);
+      toast.error('Erro ao bloquear horário');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleUnblockTime(blockedTimeId: string) {
+    try {
+      const { error } = await supabase
+        .from('professional_blocked_times')
+        .delete()
+        .eq('id', blockedTimeId);
+
+      if (error) throw error;
+
+      toast.success('Horário desbloqueado!');
+      setDialogOpen(false);
+      fetchBlockedTimes();
+    } catch (error) {
+      console.error('Error unblocking time:', error);
+      toast.error('Erro ao desbloquear horário');
+    }
   }
 
   async function handleUpdateStatus(appointmentId: string, newStatus: string, updatePayment = false) {
@@ -311,7 +441,7 @@ export default function FuncionarioAgenda() {
   const renderSlotDialog = () => {
     if (!selectedSlot) return null;
 
-    const { date, time, appointment } = selectedSlot;
+    const { date, time, appointment, blockedTime } = selectedSlot;
     const status = getSlotStatus(date, time);
 
     return (
@@ -331,7 +461,37 @@ export default function FuncionarioAgenda() {
             </DialogDescription>
           </DialogHeader>
 
-          {appointment ? (
+          {/* Blocked time view */}
+          {status === 'blocked' && blockedTime && (
+            <div className="space-y-4">
+              <div className="space-y-3 rounded-lg bg-slate-100 dark:bg-slate-800 p-4">
+                <div className="flex items-center gap-3">
+                  <Ban className="h-5 w-5 text-slate-600" />
+                  <span className="font-medium">
+                    {!blockedTime.start_time ? 'Dia inteiro bloqueado' : 'Horário bloqueado'}
+                  </span>
+                </div>
+                {blockedTime.reason && (
+                  <div className="pt-2 border-t border-slate-200 dark:border-slate-700">
+                    <p className="text-sm text-muted-foreground">
+                      <strong>Motivo:</strong> {blockedTime.reason}
+                    </p>
+                  </div>
+                )}
+              </div>
+              <Button 
+                onClick={() => handleUnblockTime(blockedTime.id)}
+                variant="outline"
+                className="w-full"
+              >
+                <Unlock className="h-4 w-4 mr-2" />
+                Desbloquear
+              </Button>
+            </div>
+          )}
+
+          {/* Appointment view */}
+          {appointment && status !== 'blocked' ? (
             <div className="space-y-4">
               <div className="space-y-3 rounded-lg bg-muted/50 p-4">
                 <div className="flex items-center gap-3">
@@ -430,11 +590,81 @@ export default function FuncionarioAgenda() {
                 )}
               </div>
             </div>
-          ) : (
-            <div className="py-6 text-center">
-              <p className="text-muted-foreground">Horário disponível para agendamento.</p>
+          ) : status === 'available' ? (
+            <div className="space-y-4">
+              <p className="text-muted-foreground text-center">Horário disponível para agendamento.</p>
+              <Button 
+                onClick={handleOpenBlockDialog}
+                variant="outline" 
+                className="w-full"
+              >
+                <Ban className="h-4 w-4 mr-2" />
+                Bloquear este horário
+              </Button>
             </div>
-          )}
+          ) : null}
+        </DialogContent>
+      </Dialog>
+    );
+  };
+
+  const renderBlockDialog = () => {
+    if (!selectedSlot) return null;
+
+    return (
+      <Dialog open={blockDialogOpen} onOpenChange={setBlockDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Ban className="h-5 w-5" />
+              Bloquear Horário
+            </DialogTitle>
+            <DialogDescription>
+              {format(selectedSlot.date, "EEEE, d 'de' MMMM", { locale: ptBR })} às {selectedSlot.time}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <Label htmlFor="full-day" className="text-sm font-medium">
+                Bloquear o dia inteiro
+              </Label>
+              <Switch 
+                id="full-day"
+                checked={blockFullDay}
+                onCheckedChange={setBlockFullDay}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="reason">Motivo (opcional - visível para clientes)</Label>
+              <Textarea 
+                id="reason"
+                placeholder="Ex: Consulta médica, Férias, Reunião..."
+                value={blockReason}
+                onChange={(e) => setBlockReason(e.target.value)}
+                className="resize-none"
+                rows={3}
+              />
+            </div>
+
+            <div className="flex gap-2">
+              <Button 
+                onClick={handleBlockTime}
+                disabled={saving}
+                className="flex-1"
+              >
+                {saving ? 'Salvando...' : 'Bloquear'}
+              </Button>
+              <Button 
+                variant="outline"
+                onClick={() => setBlockDialogOpen(false)}
+                className="flex-1"
+              >
+                Cancelar
+              </Button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
     );
@@ -483,6 +713,10 @@ export default function FuncionarioAgenda() {
               <div className="flex items-center gap-2">
                 <div className={`w-4 h-4 rounded ${STATUS_COLORS.available}`} />
                 <span>Disponível</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className={`w-4 h-4 rounded ${STATUS_COLORS.blocked}`} />
+                <span>Bloqueado</span>
               </div>
               <div className="flex items-center gap-2">
                 <div className={`w-4 h-4 rounded ${STATUS_COLORS.pending}`} />
@@ -549,6 +783,7 @@ export default function FuncionarioAgenda() {
                       {weekDays.map((day, dayIdx) => {
                         const status = getSlotStatus(day, time);
                         const appointment = getAppointmentForSlot(day, time);
+                        const blockedTime = getBlockedTimeForSlot(day, time);
                         const isClickable = status !== 'unavailable';
 
                         return (
@@ -568,11 +803,13 @@ export default function FuncionarioAgenda() {
                                   transition-colors
                                 `}
                               >
-                                {appointment && (
+                                {status === 'blocked' ? (
+                                  <Ban className="h-4 w-4" />
+                                ) : appointment ? (
                                   <span className="truncate px-1 text-[10px]">
                                     {appointment.patient_name.split(' ')[0]}
                                   </span>
-                                )}
+                                ) : null}
                               </div>
                             )}
                           </div>
@@ -586,8 +823,9 @@ export default function FuncionarioAgenda() {
           </CardContent>
         </Card>
 
-        {/* Slot Dialog */}
+        {/* Dialogs */}
         {renderSlotDialog()}
+        {renderBlockDialog()}
       </div>
     </FuncionarioLayout>
   );
