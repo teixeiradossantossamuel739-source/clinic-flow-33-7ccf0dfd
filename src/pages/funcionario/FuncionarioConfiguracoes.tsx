@@ -58,34 +58,58 @@ interface ThemeCardProps {
 }
 
 function ThemeCard({ value, label, icon, isSelected, onClick, previewBg, previewFg }: ThemeCardProps) {
+  const isSystem = value === 'system';
+  
   return (
     <button
       onClick={onClick}
       className={cn(
         "relative flex flex-col items-center gap-3 p-4 rounded-xl border-2 transition-all duration-300 group overflow-hidden",
         "hover:scale-[1.02] active:scale-[0.98]",
-        isSelected 
+        isSystem && isSelected
+          ? "border-cyan-400 bg-gradient-to-br from-blue-950 to-indigo-950 shadow-lg shadow-cyan-500/30"
+          : isSystem
+          ? "border-cyan-600/30 bg-gradient-to-br from-blue-950/80 to-indigo-950/80 hover:border-cyan-400/60"
+          : isSelected 
           ? "border-primary bg-primary/5 shadow-lg shadow-primary/20" 
           : "border-border/50 bg-card hover:border-primary/50 hover:bg-accent/50"
       )}
     >
       {/* Glow effect when selected */}
-      {isSelected && (
+      {isSelected && !isSystem && (
         <div className="absolute inset-0 bg-gradient-to-br from-primary/10 via-transparent to-primary/5 animate-pulse" />
+      )}
+      
+      {/* Futuristic glow for system theme */}
+      {isSystem && (
+        <div className={cn(
+          "absolute inset-0 bg-gradient-to-br from-cyan-500/10 via-purple-500/5 to-blue-500/10",
+          isSelected && "animate-pulse"
+        )} />
       )}
       
       {/* Animated corner sparkles */}
       {isSelected && (
         <>
-          <Sparkles className="absolute top-1 right-1 h-3 w-3 text-primary/60 animate-pulse" />
-          <Sparkles className="absolute bottom-1 left-1 h-3 w-3 text-primary/40 animate-pulse" style={{ animationDelay: '0.5s' }} />
+          <Sparkles className={cn(
+            "absolute top-1 right-1 h-3 w-3 animate-pulse",
+            isSystem ? "text-cyan-400/80" : "text-primary/60"
+          )} />
+          <Sparkles className={cn(
+            "absolute bottom-1 left-1 h-3 w-3 animate-pulse",
+            isSystem ? "text-purple-400/60" : "text-primary/40"
+          )} style={{ animationDelay: '0.5s' }} />
         </>
       )}
       
       {/* Icon with animation */}
       <div className={cn(
         "relative z-10 p-3 rounded-full transition-all duration-300",
-        isSelected 
+        isSystem && isSelected
+          ? "bg-gradient-to-br from-cyan-400 to-blue-500 text-white shadow-lg shadow-cyan-400/40"
+          : isSystem
+          ? "bg-cyan-900/50 text-cyan-400 group-hover:bg-cyan-800/60"
+          : isSelected 
           ? "bg-primary text-primary-foreground shadow-lg shadow-primary/30" 
           : "bg-muted text-muted-foreground group-hover:bg-primary/20 group-hover:text-primary"
       )}>
@@ -102,7 +126,9 @@ function ThemeCard({ value, label, icon, isSelected, onClick, previewBg, preview
       {/* Label */}
       <span className={cn(
         "relative z-10 font-medium text-sm transition-colors duration-300",
-        isSelected ? "text-primary" : "text-muted-foreground group-hover:text-foreground"
+        isSystem 
+          ? isSelected ? "text-purple-300" : "text-purple-400/80 group-hover:text-purple-300"
+          : isSelected ? "text-primary" : "text-muted-foreground group-hover:text-foreground"
       )}>
         {label}
       </span>
@@ -110,29 +136,31 @@ function ThemeCard({ value, label, icon, isSelected, onClick, previewBg, preview
       {/* Preview mini screen */}
       <div className={cn(
         "relative z-10 w-full h-12 rounded-lg border overflow-hidden transition-all duration-300",
-        isSelected ? "border-primary/30 shadow-inner" : "border-border/30"
+        isSystem 
+          ? isSelected ? "border-cyan-400/40 shadow-inner shadow-cyan-500/20" : "border-cyan-600/20"
+          : isSelected ? "border-primary/30 shadow-inner" : "border-border/30"
       )}>
-        {value === 'system' ? (
-          // Split preview for system theme
-          <div className="w-full h-full flex">
-            <div className="w-1/2 h-full bg-white">
-              <div className="h-2 w-full bg-gray-200 flex items-center gap-0.5 px-1">
-                <div className="w-1 h-1 rounded-full bg-gray-400" />
-                <div className="w-1 h-1 rounded-full bg-gray-400" />
+        {isSystem ? (
+          // Futuristic split preview for system theme
+          <div className="w-full h-full flex bg-gradient-to-r from-blue-900 to-indigo-900">
+            <div className="w-1/2 h-full border-r border-cyan-500/30">
+              <div className="h-2 w-full bg-blue-800/50 flex items-center gap-0.5 px-1">
+                <div className="w-1 h-1 rounded-full bg-purple-400" />
+                <div className="w-1 h-1 rounded-full bg-cyan-400" />
               </div>
               <div className="p-1 space-y-0.5">
-                <div className="h-1 w-3/4 rounded bg-gray-300" />
-                <div className="h-1 w-1/2 rounded bg-gray-200" />
+                <div className="h-1 w-3/4 rounded bg-purple-500/50" />
+                <div className="h-1 w-1/2 rounded bg-cyan-500/30" />
               </div>
             </div>
-            <div className="w-1/2 h-full bg-slate-900">
-              <div className="h-2 w-full bg-slate-800 flex items-center justify-end gap-0.5 px-1">
-                <div className="w-1 h-1 rounded-full bg-slate-600" />
-                <div className="w-1 h-1 rounded-full bg-slate-600" />
+            <div className="w-1/2 h-full">
+              <div className="h-2 w-full bg-indigo-800/50 flex items-center justify-end gap-0.5 px-1">
+                <div className="w-1 h-1 rounded-full bg-cyan-400" />
+                <div className="w-1 h-1 rounded-full bg-purple-400" />
               </div>
               <div className="p-1 space-y-0.5">
-                <div className="h-1 w-3/4 rounded bg-slate-700" />
-                <div className="h-1 w-1/2 rounded bg-slate-800" />
+                <div className="h-1 w-3/4 rounded bg-cyan-500/40" />
+                <div className="h-1 w-1/2 rounded bg-purple-500/30" />
               </div>
             </div>
           </div>
@@ -155,7 +183,10 @@ function ThemeCard({ value, label, icon, isSelected, onClick, previewBg, preview
       
       {/* Selection indicator */}
       {isSelected && (
-        <div className="absolute -bottom-px left-1/2 -translate-x-1/2 w-8 h-1 bg-primary rounded-t-full" />
+        <div className={cn(
+          "absolute -bottom-px left-1/2 -translate-x-1/2 w-8 h-1 rounded-t-full",
+          isSystem ? "bg-gradient-to-r from-cyan-400 to-purple-500" : "bg-primary"
+        )} />
       )}
     </button>
   );
