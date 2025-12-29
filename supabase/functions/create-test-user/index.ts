@@ -38,43 +38,57 @@ serve(async (req) => {
       { auth: { persistSession: false } }
     );
 
-    // Security: Verify caller is an admin
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader) {
-      logStep("ERROR: No authorization header");
-      return new Response(
-        JSON.stringify({ error: "Authorization required" }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 401 }
-      );
-    }
-
-    const token = authHeader.replace("Bearer ", "");
-    const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
-    
-    if (authError || !user) {
-      logStep("ERROR: Invalid token", { error: authError?.message });
-      return new Response(
-        JSON.stringify({ error: "Invalid authorization token" }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 401 }
-      );
-    }
-
-    // Check if user has admin role
-    const { data: roleData, error: roleError } = await supabaseAdmin
+    // Check if there are any admin users in the system
+    const { data: adminCheck } = await supabaseAdmin
       .from('user_roles')
-      .select('role')
-      .eq('user_id', user.id)
-      .single();
+      .select('id')
+      .eq('role', 'admin')
+      .limit(1);
 
-    if (roleError || roleData?.role !== 'admin') {
-      logStep("ERROR: User is not admin", { userId: user.id, role: roleData?.role });
-      return new Response(
-        JSON.stringify({ error: "Admin access required" }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 403 }
-      );
+    const hasAdmins = adminCheck && adminCheck.length > 0;
+    logStep("Admin check", { hasAdmins });
+
+    // If there are admins, require authentication
+    if (hasAdmins) {
+      const authHeader = req.headers.get("Authorization");
+      if (!authHeader) {
+        logStep("ERROR: No authorization header");
+        return new Response(
+          JSON.stringify({ error: "Authorization required" }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 401 }
+        );
+      }
+
+      const token = authHeader.replace("Bearer ", "");
+      const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
+      
+      if (authError || !user) {
+        logStep("ERROR: Invalid token", { error: authError?.message });
+        return new Response(
+          JSON.stringify({ error: "Invalid authorization token" }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 401 }
+        );
+      }
+
+      // Check if user has admin role
+      const { data: roleData, error: roleError } = await supabaseAdmin
+        .from('user_roles')
+        .select('role')
+        .eq('user_id', user.id)
+        .single();
+
+      if (roleError || roleData?.role !== 'admin') {
+        logStep("ERROR: User is not admin", { userId: user.id, role: roleData?.role });
+        return new Response(
+          JSON.stringify({ error: "Admin access required" }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 403 }
+        );
+      }
+
+      logStep("Admin verified", { userId: user.id });
+    } else {
+      logStep("No admins exist yet, allowing initial setup");
     }
-
-    logStep("Admin verified", { userId: user.id });
 
     const body = await req.json();
     
