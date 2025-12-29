@@ -70,7 +70,8 @@ serve(async (req) => {
         appointment_time,
         professional_uuid,
         service_id,
-        status
+        status,
+        confirmation_token
       `)
       .eq('appointment_date', tomorrowStr)
       .eq('status', 'confirmed');
@@ -136,21 +137,28 @@ serve(async (req) => {
         const formattedDate = formatDate(appointment.appointment_date);
         const formattedTime = appointment.appointment_time.slice(0, 5);
 
-        // Message for patient
-        const patientMessage = `📅 *Lembrete de Consulta*
+        // Get base URL for confirmation link
+        const baseUrl = Deno.env.get("APP_URL") || "https://unlkencwjcnlworjeexw.supabase.co";
+        const confirmationUrl = appointment.confirmation_token 
+          ? `${baseUrl}/confirmar-presenca?token=${appointment.confirmation_token}`
+          : '';
 
-Olá ${appointment.patient_name}! 👋
+        // Message for patient with confirmation link
+        const patientMessage = `*Lembrete de Consulta*
 
-Lembramos que você tem uma consulta agendada:
+Ola ${appointment.patient_name}!
 
-📆 *Data:* ${formattedDate}
-⏰ *Horário:* ${formattedTime}
-🏥 *Profissional:* ${professional.name}
-${serviceName ? `💼 *Serviço:* ${serviceName}` : ''}
+Lembramos que voce tem uma consulta agendada:
 
-⚠️ Em caso de imprevisto, por favor avise com antecedência.
+*Data:* ${formattedDate}
+*Horario:* ${formattedTime}
+*Profissional:* ${professional.name}
+${serviceName ? `*Servico:* ${serviceName}` : ''}
 
-Aguardamos você! 😊`;
+${confirmationUrl ? `*Confirme sua presenca:*\n${confirmationUrl}\n` : ''}
+Em caso de imprevisto, por favor avise com antecedencia.
+
+Aguardamos voce!`;
 
         const patientWhatsAppLink = generateWhatsAppLink(appointment.patient_phone, patientMessage);
 
