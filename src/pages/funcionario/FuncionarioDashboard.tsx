@@ -399,6 +399,11 @@ Aguardamos você! 😊`;
     });
   }, [appointments]);
 
+  const goalProgress = useMemo(() => {
+    if (!financialGoal || financialGoal.goal_amount_cents === 0) return 0;
+    return Math.min(100, (stats.monthlyRevenue / financialGoal.goal_amount_cents) * 100);
+  }, [financialGoal, stats.monthlyRevenue]);
+
   const formatCurrency = (cents: number) => {
     return new Intl.NumberFormat('pt-BR', {
       style: 'currency',
@@ -446,11 +451,6 @@ Aguardamos você! 😊`;
       </FuncionarioLayout>
     );
   }
-
-  const goalProgress = useMemo(() => {
-    if (!financialGoal || financialGoal.goal_amount_cents === 0) return 0;
-    return Math.min(100, (stats.monthlyRevenue / financialGoal.goal_amount_cents) * 100);
-  }, [financialGoal, stats.monthlyRevenue]);
 
   const getProgressColor = (progress: number) => {
     if (progress >= 100) return 'bg-green-500';
