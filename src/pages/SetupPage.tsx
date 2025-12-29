@@ -18,7 +18,7 @@ type UserStatus = 'idle' | 'loading' | 'created' | 'updated' | 'exists' | 'error
 
 const testUsers: TestUser[] = [
   {
-    email: 'adm.teste@gmail.com',
+    email: 'admin@teste.com',
     password: 'teste123',
     fullName: 'Administrador',
     role: 'admin',
@@ -28,19 +28,10 @@ const testUsers: TestUser[] = [
   {
     email: 'funcionariolucas@gmail.com',
     password: 'teste123',
-    fullName: 'Dr. Lucas Mendes',
+    fullName: 'Dr. Lucas Silva',
     role: 'funcionario',
     description: 'Setor: Clínica Geral',
     professionalId: '0147089c-d119-43fc-9132-5f9299f9d861',
-    icon: <Briefcase className="h-4 w-4" />,
-  },
-  {
-    email: 'funcionariocarlos@gmail.com',
-    password: 'teste123',
-    fullName: 'Dr. Carlos Ferreira',
-    role: 'funcionario',
-    description: 'Setor: Cardiologia',
-    professionalId: '898d6900-3e8b-4a9a-b162-69a66e9438ee',
     icon: <Briefcase className="h-4 w-4" />,
   },
   {
@@ -53,9 +44,18 @@ const testUsers: TestUser[] = [
     icon: <Briefcase className="h-4 w-4" />,
   },
   {
+    email: 'funcionariocarlos@gmail.com',
+    password: 'teste123',
+    fullName: 'Dr. Carlos Oliveira',
+    role: 'funcionario',
+    description: 'Setor: Cardiologia',
+    professionalId: '898d6900-3e8b-4a9a-b162-69a66e9438ee',
+    icon: <Briefcase className="h-4 w-4" />,
+  },
+  {
     email: 'funcionariocarol@gmail.com',
     password: 'teste123',
-    fullName: 'Dra. Carol Oliveira',
+    fullName: 'Dra. Carol Ferreira',
     role: 'funcionario',
     description: 'Setor: Pediatria',
     professionalId: '25f74fb5-6fa7-462a-a538-7b81c76aa970',
@@ -64,7 +64,7 @@ const testUsers: TestUser[] = [
   {
     email: 'funcionarioleandro@gmail.com',
     password: 'teste123',
-    fullName: 'Dr. Leandro Silva',
+    fullName: 'Dr. Leandro Costa',
     role: 'funcionario',
     description: 'Setor: Ortopedia',
     professionalId: '841ef393-3a32-489b-9f34-dc24384e866a',
@@ -73,10 +73,28 @@ const testUsers: TestUser[] = [
   {
     email: 'funcionariojulia@gmail.com',
     password: 'teste123',
-    fullName: 'Dra. Julia Nascimento',
+    fullName: 'Dra. Julia Mendes',
     role: 'funcionario',
     description: 'Setor: Oftalmologia',
     professionalId: 'b6a03493-f586-4db7-8c34-e30cc649f9f1',
+    icon: <Briefcase className="h-4 w-4" />,
+  },
+  {
+    email: 'funcionarioandre@gmail.com',
+    password: 'teste123',
+    fullName: 'Dr. André Nascimento',
+    role: 'funcionario',
+    description: 'Setor: Cardiologia',
+    professionalId: 'a56d0791-a848-4abf-ab1c-a2cae8bc5f57',
+    icon: <Briefcase className="h-4 w-4" />,
+  },
+  {
+    email: 'funcionariobeatriz@gmail.com',
+    password: 'teste123',
+    fullName: 'Dra. Beatriz Oliveira',
+    role: 'funcionario',
+    description: 'Setor: Ginecologia',
+    professionalId: 'a2d3f55f-0936-4588-b1b2-8615c4b0f63d',
     icon: <Briefcase className="h-4 w-4" />,
   },
 ];
@@ -168,14 +186,14 @@ export default function SetupPage() {
             </div>
             <div>
               <h1 className="text-2xl font-bold">Setup - Usuários de Teste</h1>
-              <p className="text-clinic-text-secondary">1 Admin + 6 Funcionários (Setores)</p>
+              <p className="text-clinic-text-secondary">1 Admin + 8 Funcionários (Setores)</p>
             </div>
           </div>
 
           <div className="p-4 rounded-lg bg-info/10 border border-info/20 mb-6">
-            <p className="text-sm text-info font-medium mb-1">6 Setores da Clínica</p>
+            <p className="text-sm text-info font-medium mb-1">8 Funcionários em 7 Setores</p>
             <p className="text-xs text-clinic-text-secondary">
-              Cada funcionário representa um setor: Clínica Geral, Cardiologia, Dermatologia, Pediatria, Ortopedia e Oftalmologia.
+              Clínica Geral, Cardiologia (2), Dermatologia, Pediatria, Ortopedia, Oftalmologia e Ginecologia.
             </p>
           </div>
 
