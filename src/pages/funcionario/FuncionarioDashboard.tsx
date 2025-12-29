@@ -73,6 +73,8 @@ interface FinancialGoal {
 
 export default function FuncionarioDashboard() {
   const { user } = useAuth();
+  
+  // All useState hooks first
   const [professional, setProfessional] = useState<Professional | null>(null);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [loading, setLoading] = useState(true);
@@ -80,9 +82,12 @@ export default function FuncionarioDashboard() {
   const [financialGoal, setFinancialGoal] = useState<FinancialGoal | null>(null);
   const [goalDialogOpen, setGoalDialogOpen] = useState(false);
   const [goalInput, setGoalInput] = useState('');
+  
+  // Store professional ID in a stable variable for hooks
+  const professionalId = professional?.id || null;
 
-  // Enable real-time notifications for this professional
-  const { unreadCount } = useAppointmentNotifications(professional?.id || null);
+  // Custom hook for notifications - must be called unconditionally
+  const { unreadCount } = useAppointmentNotifications(professionalId);
 
   useEffect(() => {
     if (user) {
