@@ -2,6 +2,7 @@ import { useEffect, useState, useMemo } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { FuncionarioLayout } from '@/components/layout/FuncionarioLayout';
+import { useAppointmentNotifications } from '@/hooks/useAppointmentNotifications';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -79,6 +80,9 @@ export default function FuncionarioDashboard() {
   const [financialGoal, setFinancialGoal] = useState<FinancialGoal | null>(null);
   const [goalDialogOpen, setGoalDialogOpen] = useState(false);
   const [goalInput, setGoalInput] = useState('');
+
+  // Enable real-time notifications for this professional
+  const { unreadCount } = useAppointmentNotifications(professional?.id || null);
 
   useEffect(() => {
     if (user) {

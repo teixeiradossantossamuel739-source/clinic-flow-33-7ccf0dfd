@@ -14,6 +14,7 @@ interface AppointmentDetails {
   appointment_time: string;
   patient_confirmed_at: string | null;
   status: string;
+  professional_uuid?: string;
   professional?: {
     name: string;
   };
@@ -104,6 +105,22 @@ export default function ConfirmAppointment() {
         .eq('confirmation_token', token);
 
       if (updateError) throw updateError;
+
+      // Create notification for professional
+      if (appointment.professional_uuid) {
+        const formattedDate = formatDate(appointment.appointment_date);
+        const formattedTime = appointment.appointment_time.slice(0, 5);
+        
+        await supabase
+          .from('notifications')
+          .insert({
+            professional_id: appointment.professional_uuid,
+            type: 'patient_confirmed',
+            title: 'Presenca Confirmada',
+            message: `${appointment.patient_name} confirmou presenca para ${formattedDate} as ${formattedTime}`,
+            appointment_id: appointment.id
+          });
+      }
 
       setConfirmed(true);
     } catch (err) {
