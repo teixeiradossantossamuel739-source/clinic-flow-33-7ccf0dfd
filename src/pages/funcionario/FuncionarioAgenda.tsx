@@ -53,11 +53,12 @@ interface Schedule {
   is_active: boolean;
 }
 
-type SlotStatus = 'available' | 'pending' | 'confirmed' | 'completed' | 'cancelled' | 'unavailable';
+type SlotStatus = 'available' | 'pending' | 'awaiting_payment' | 'confirmed' | 'completed' | 'cancelled' | 'unavailable';
 
 const STATUS_COLORS: Record<SlotStatus, string> = {
   available: 'bg-emerald-500 hover:bg-emerald-600',
   pending: 'bg-amber-400 hover:bg-amber-500',
+  awaiting_payment: 'bg-orange-500 hover:bg-orange-600 animate-pulse',
   confirmed: 'bg-red-500 hover:bg-red-600',
   completed: 'bg-muted hover:bg-muted/80',
   cancelled: 'bg-transparent border border-dashed border-muted-foreground/30',
@@ -67,6 +68,7 @@ const STATUS_COLORS: Record<SlotStatus, string> = {
 const STATUS_LABELS: Record<SlotStatus, string> = {
   available: 'Disponível',
   pending: 'Aguardando',
+  awaiting_payment: '💰 Conferir Pagamento',
   confirmed: 'Confirmado',
   completed: 'Realizado',
   cancelled: 'Cancelado',
@@ -227,6 +229,11 @@ export default function FuncionarioAgenda() {
 
     if (!appointment) return 'available';
     
+    // Check if payment is awaiting confirmation (highest priority visual)
+    if (appointment.payment_status === 'awaiting_confirmation') {
+      return 'awaiting_payment';
+    }
+    
     switch (appointment.status) {
       case 'pending': return 'pending';
       case 'confirmed': return 'confirmed';
@@ -253,23 +260,34 @@ export default function FuncionarioAgenda() {
     setDialogOpen(true);
   }
 
-  async function handleUpdateStatus(appointmentId: string, newStatus: string) {
+  async function handleUpdateStatus(appointmentId: string, newStatus: string, updatePayment = false) {
     try {
+      const updateData: { status: string; payment_status?: string } = { status: newStatus };
+      
+      // When confirming from awaiting_payment, also update payment_status to paid
+      if (updatePayment && newStatus === 'confirmed') {
+        updateData.payment_status = 'paid';
+      }
+      // When cancelling, also update payment_status
+      if (newStatus === 'cancelled') {
+        updateData.payment_status = 'cancelled';
+      }
+
       const { error } = await supabase
         .from('appointments')
-        .update({ status: newStatus })
+        .update(updateData)
         .eq('id', appointmentId);
 
       if (error) throw error;
 
       setAppointments(prev =>
         prev.map(apt =>
-          apt.id === appointmentId ? { ...apt, status: newStatus } : apt
+          apt.id === appointmentId ? { ...apt, ...updateData } : apt
         )
       );
 
       const statusMessages: Record<string, string> = {
-        confirmed: 'Consulta confirmada com sucesso!',
+        confirmed: updatePayment ? 'Pagamento confirmado! Consulta agendada.' : 'Consulta confirmada com sucesso!',
         cancelled: 'Consulta cancelada.',
         completed: 'Consulta marcada como realizada!',
       };
@@ -346,6 +364,31 @@ export default function FuncionarioAgenda() {
               </div>
 
               <div className="flex flex-wrap gap-2">
+                {status === 'awaiting_payment' && (
+                  <>
+                    <div className="w-full mb-2 p-3 bg-orange-50 border border-orange-200 rounded-lg">
+                      <p className="text-sm font-medium text-orange-800">
+                        ⚠️ Cliente informou que já pagou
+                      </p>
+                      <p className="text-xs text-orange-600 mt-1">
+                        Confira no app do banco antes de confirmar!
+                      </p>
+                    </div>
+                    <Button 
+                      onClick={() => handleUpdateStatus(appointment.id, 'confirmed', true)}
+                      className="flex-1 bg-green-600 hover:bg-green-700"
+                    >
+                      ✅ Confirmar Pagamento
+                    </Button>
+                    <Button 
+                      variant="outline"
+                      onClick={() => handleUpdateStatus(appointment.id, 'cancelled')}
+                      className="flex-1"
+                    >
+                      ❌ Recusar
+                    </Button>
+                  </>
+                )}
                 {status === 'pending' && (
                   <>
                     <Button 
@@ -443,7 +486,11 @@ export default function FuncionarioAgenda() {
               </div>
               <div className="flex items-center gap-2">
                 <div className={`w-4 h-4 rounded ${STATUS_COLORS.pending}`} />
-                <span>Aguardando Confirmação</span>
+                <span>Aguardando</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className={`w-4 h-4 rounded ${STATUS_COLORS.awaiting_payment}`} />
+                <span>💰 Conferir Pagamento</span>
               </div>
               <div className="flex items-center gap-2">
                 <div className={`w-4 h-4 rounded ${STATUS_COLORS.confirmed}`} />

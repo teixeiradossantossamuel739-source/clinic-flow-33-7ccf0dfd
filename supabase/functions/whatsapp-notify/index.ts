@@ -14,7 +14,8 @@ interface WhatsAppNotificationRequest {
   appointmentTime: string;
   serviceName?: string;
   appointmentId: string;
-  type: 'new_appointment' | 'cancelled' | 'confirmed';
+  type: 'new_appointment' | 'cancelled' | 'confirmed' | 'payment_analysis';
+  amountCents?: number;
 }
 
 const logStep = (step: string, details?: any) => {
@@ -76,7 +77,8 @@ serve(async (req) => {
       appointmentTime, 
       serviceName,
       appointmentId,
-      type 
+      type,
+      amountCents
     } = body;
 
     logStep("Request received", { type, appointmentId, patientName });
@@ -95,6 +97,8 @@ serve(async (req) => {
     const formattedDate = formatDate(appointmentDate);
     let message = '';
 
+    const formattedAmount = amountCents ? `R$ ${(amountCents / 100).toFixed(2)}` : '';
+
     switch (type) {
       case 'new_appointment':
         message = `🔔 *Novo Agendamento!*
@@ -106,6 +110,21 @@ serve(async (req) => {
 ${serviceName ? `🏥 *Serviço:* ${serviceName}` : ''}
 
 Acesse o painel para confirmar ou cancelar.`;
+        break;
+
+      case 'payment_analysis':
+        message = `🔔 *PAGAMENTO EM ANÁLISE!*
+
+⚠️ O cliente informou que já pagou. Confira no app do banco!
+
+📋 *Paciente:* ${patientName}
+📱 *WhatsApp:* ${patientPhone}
+📅 *Data:* ${formattedDate}
+⏰ *Horário:* ${appointmentTime}
+${serviceName ? `🏥 *Serviço:* ${serviceName}` : ''}
+${formattedAmount ? `💰 *Valor:* ${formattedAmount}` : ''}
+
+👉 Acesse o painel e clique em *Confirmar Pagamento* após verificar.`;
         break;
         
       case 'confirmed':
