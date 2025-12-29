@@ -1,6 +1,8 @@
-import { ReactNode, useState } from 'react';
+import { ReactNode, useState, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
+import { supabase } from '@/integrations/supabase/client';
+import { useAppointmentNotifications } from '@/hooks/useAppointmentNotifications';
 import {
   Sidebar,
   SidebarContent,
@@ -45,6 +47,29 @@ export function FuncionarioLayout({ children }: FuncionarioLayoutProps) {
   const { user, profile, signOut } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
+  const [professionalId, setProfessionalId] = useState<string | null>(null);
+
+  // Fetch professional ID for the logged-in user
+  useEffect(() => {
+    const fetchProfessionalId = async () => {
+      if (!user) return;
+      
+      const { data } = await supabase
+        .from('professionals')
+        .select('id')
+        .eq('user_id', user.id)
+        .maybeSingle();
+      
+      if (data) {
+        setProfessionalId(data.id);
+      }
+    };
+
+    fetchProfessionalId();
+  }, [user]);
+
+  // Enable real-time notifications for this professional
+  useAppointmentNotifications(professionalId);
 
   const handleSignOut = async () => {
     await signOut();
