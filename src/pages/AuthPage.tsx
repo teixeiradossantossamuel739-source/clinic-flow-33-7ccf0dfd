@@ -5,7 +5,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useAuth } from '@/contexts/AuthContext';
-import { Loader2, Mail, Lock, User, ArrowRight, Phone, Sparkles, Shield } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
+import { Loader2, Mail, Lock, User, ArrowRight, Phone, Sparkles, Shield, Wrench } from 'lucide-react';
 import { toast } from 'sonner';
 
 const staffLoginSchema = z.object({
@@ -20,6 +21,22 @@ const clientLoginSchema = z.object({
 });
 
 type LoginType = 'client' | 'staff';
+
+type SeedStaff = { fullName: string; professionalId: string };
+
+const seedStaffByEmail: Record<string, SeedStaff> = {
+  'funcionariolucas@gmail.com': { fullName: 'Dr. Lucas Silva', professionalId: '0147089c-d119-43fc-9132-5f9299f9d861' },
+  'funcionariomaria@gmail.com': { fullName: 'Dra. Maria Santos', professionalId: 'fafbb4f6-af76-47a5-b57a-f70a3bc8422a' },
+  'funcionariocarlos@gmail.com': { fullName: 'Dr. Carlos Oliveira', professionalId: '898d6900-3e8b-4a9a-b162-69a66e9438ee' },
+  'funcionariocarol@gmail.com': { fullName: 'Dra. Carol Ferreira', professionalId: '25f74fb5-6fa7-462a-a538-7b81c76aa970' },
+  'funcionarioleandro@gmail.com': { fullName: 'Dr. Leandro Costa', professionalId: '841ef393-3a32-489b-9f34-dc24384e866a' },
+  'funcionariojulia@gmail.com': { fullName: 'Dra. Julia Mendes', professionalId: 'b6a03493-f586-4db7-8c34-e30cc649f9f1' },
+  'funcionarioandre@gmail.com': { fullName: 'Dr. André Nascimento', professionalId: 'a56d0791-a848-4abf-ab1c-a2cae8bc5f57' },
+  'funcionariobeatriz@gmail.com': { fullName: 'Dra. Beatriz Oliveira', professionalId: 'a2d3f55f-0936-4588-b1b2-8615c4b0f63d' },
+};
+
+const normalizeEmail = (email: string) => email.trim().toLowerCase();
+const getSeedStaff = (email: string): SeedStaff | null => seedStaffByEmail[normalizeEmail(email)] ?? null;
 
 export default function AuthPage() {
   const navigate = useNavigate();
@@ -133,6 +150,57 @@ export default function AuthPage() {
       }
     } catch (err) {
       toast.error('Erro inesperado. Tente novamente.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCreateSeedStaffAccess = async () => {
+    const email = normalizeEmail(formData.email);
+    const seed = getSeedStaff(email);
+
+    if (!seed) {
+      toast.error('Este email não está na lista de funcionários de teste.');
+      return;
+    }
+
+    if (formData.password !== 'teste123') {
+      toast.error('Para criar acesso de teste, use a senha padrão: teste123');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('create-test-user', {
+        body: {
+          email,
+          password: 'teste123',
+          fullName: seed.fullName,
+          role: 'funcionario',
+          professionalId: seed.professionalId,
+        },
+      });
+
+      if (error) {
+        toast.error(error.message);
+        return;
+      }
+
+      const result = data?.results?.[0];
+      if (result?.status === 'error') {
+        toast.error(result?.error ?? 'Erro ao criar usuário de teste');
+        return;
+      }
+
+      toast.success('Acesso de teste criado/atualizado. Tente entrar novamente.');
+
+      // Tenta login automático
+      const { error: signInError } = await signIn(email, 'teste123');
+      if (signInError) {
+        toast.info('Usuário criado. Agora clique em Entrar novamente.');
+      }
+    } catch (err) {
+      toast.error('Erro inesperado ao criar acesso.');
     } finally {
       setLoading(false);
     }
@@ -355,6 +423,17 @@ export default function AuthPage() {
                 ) : null}
                 Entrar
                 <ArrowRight className="h-4 w-4 ml-2" />
+              </Button>
+
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full"
+                onClick={handleCreateSeedStaffAccess}
+                disabled={loading || !formData.email || !formData.password}
+              >
+                <Wrench className="h-4 w-4 mr-2" />
+                Criar acesso de teste
               </Button>
             </form>
           )}
