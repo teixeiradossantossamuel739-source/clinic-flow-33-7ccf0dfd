@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { PublicLayout } from '@/components/layout/PublicLayout';
 import { specialties, professionals, dashboardStats } from '@/data/mockData';
+import { useAuth } from '@/contexts/AuthContext';
 import { 
   Calendar, 
   Clock, 
@@ -17,7 +18,8 @@ import {
   Brain,
   Bone,
   Sparkles,
-  HeartPulse
+  HeartPulse,
+  UserCircle
 } from 'lucide-react';
 
 const iconMap: Record<string, React.ReactNode> = {
@@ -62,8 +64,46 @@ const stats = [
 ];
 
 export default function HomePage() {
+  const { user, profile } = useAuth();
+  const firstName = profile?.full_name?.split(' ')[0] || '';
+
   return (
     <PublicLayout>
+      {/* Welcome Section for Logged Users */}
+      {user && firstName && (
+        <section className="bg-gradient-to-r from-clinic-primary/10 via-clinic-primary/5 to-transparent border-b border-clinic-border-subtle animate-fade-in">
+          <div className="container py-4">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div className="h-12 w-12 rounded-full bg-clinic-primary/20 flex items-center justify-center">
+                  <UserCircle className="h-7 w-7 text-clinic-primary" />
+                </div>
+                <div>
+                  <p className="text-lg font-semibold text-foreground">
+                    Bem-vindo(a) de volta, <span className="text-clinic-primary">{firstName}</span>!
+                  </p>
+                  <p className="text-sm text-clinic-text-secondary">
+                    Estamos felizes em ter você aqui
+                  </p>
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <Link to="/minhas-consultas">
+                  <Button variant="clinic-outline" size="sm">
+                    Minhas Consultas
+                  </Button>
+                </Link>
+                <Link to="/agendar">
+                  <Button variant="clinic" size="sm">
+                    Agendar Nova
+                  </Button>
+                </Link>
+              </div>
+            </div>
+          </div>
+        </section>
+      )}
+
       {/* Hero Section */}
       <section className="relative gradient-hero overflow-hidden">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,hsl(197_55%_70%/0.1),transparent_50%)]" />
