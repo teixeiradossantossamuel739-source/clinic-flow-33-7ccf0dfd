@@ -112,15 +112,22 @@ export function PublicHeader() {
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button variant="ghost" size="sm" className="gap-2">
-                      <User className="h-4 w-4" />
-                      <span className="hidden sm:inline">{profile?.full_name || user.email}</span>
+                      <div className="h-7 w-7 rounded-full bg-clinic-primary/20 flex items-center justify-center">
+                        <User className="h-4 w-4 text-clinic-primary" />
+                      </div>
+                      <span className="hidden sm:inline text-clinic-primary font-medium">
+                        Olá, {profile?.full_name?.split(' ')[0] || 'Usuário'}
+                      </span>
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end" className="w-56">
-                    <div className="px-2 py-1.5">
-                      <p className="text-sm font-medium">{profile?.full_name || 'Usuário'}</p>
+                    <div className="px-3 py-2 bg-clinic-primary/5 rounded-md m-1">
+                      <p className="text-sm font-semibold text-foreground">{profile?.full_name || 'Usuário'}</p>
                       <p className="text-xs text-clinic-text-muted">{user.email}</p>
-                      <p className="text-xs text-clinic-primary capitalize mt-1">{role}</p>
+                      {profile?.whatsapp && (
+                        <p className="text-xs text-clinic-text-muted mt-0.5">{profile.whatsapp}</p>
+                      )}
+                      <p className="text-xs text-clinic-primary capitalize mt-1 font-medium">{role}</p>
                     </div>
                     <DropdownMenuSeparator />
                     {role === 'cliente' && (
