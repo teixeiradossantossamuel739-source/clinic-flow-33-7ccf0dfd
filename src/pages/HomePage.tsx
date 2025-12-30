@@ -1,8 +1,12 @@
 import { Link } from 'react-router-dom';
+import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { PublicLayout } from '@/components/layout/PublicLayout';
 import { specialties, professionals, dashboardStats } from '@/data/mockData';
 import { useAuth } from '@/contexts/AuthContext';
+import { supabase } from '@/integrations/supabase/client';
+import { format, parseISO, isToday, isTomorrow } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
 import { 
   Calendar, 
   Clock, 
@@ -19,8 +23,18 @@ import {
   Bone,
   Sparkles,
   HeartPulse,
-  UserCircle
+  UserCircle,
+  CalendarClock,
+  Loader2
 } from 'lucide-react';
+
+interface UpcomingAppointment {
+  id: string;
+  appointment_date: string;
+  appointment_time: string;
+  professional_id: string;
+  status: string;
+}
 
 const iconMap: Record<string, React.ReactNode> = {
   Stethoscope: <Stethoscope className="h-6 w-6" />,
@@ -63,9 +77,46 @@ const stats = [
   { value: '4.9', label: 'Avaliação média' },
 ];
 
+const formatDateLabel = (dateStr: string) => {
+  const date = parseISO(dateStr);
+  if (isToday(date)) return 'Hoje';
+  if (isTomorrow(date)) return 'Amanhã';
+  return format(date, "dd 'de' MMM", { locale: ptBR });
+};
+
 export default function HomePage() {
   const { user, profile } = useAuth();
   const firstName = profile?.full_name?.split(' ')[0] || '';
+  const [upcomingAppointments, setUpcomingAppointments] = useState<UpcomingAppointment[]>([]);
+  const [loadingAppointments, setLoadingAppointments] = useState(false);
+
+  useEffect(() => {
+    const fetchUpcomingAppointments = async () => {
+      if (!user?.email) return;
+      
+      setLoadingAppointments(true);
+      try {
+        const today = new Date().toISOString().split('T')[0];
+        const { data } = await supabase
+          .from('appointments')
+          .select('id, appointment_date, appointment_time, professional_id, status')
+          .eq('patient_email', user.email.toLowerCase())
+          .gte('appointment_date', today)
+          .neq('status', 'cancelled')
+          .order('appointment_date', { ascending: true })
+          .order('appointment_time', { ascending: true })
+          .limit(3);
+        
+        setUpcomingAppointments(data || []);
+      } catch (error) {
+        console.error('Erro ao buscar consultas:', error);
+      } finally {
+        setLoadingAppointments(false);
+      }
+    };
+
+    fetchUpcomingAppointments();
+  }, [user?.email]);
 
   return (
     <PublicLayout>
@@ -73,7 +124,7 @@ export default function HomePage() {
       {user && firstName && (
         <section className="bg-gradient-to-r from-clinic-primary/10 via-clinic-primary/5 to-transparent border-b border-clinic-border-subtle animate-fade-in">
           <div className="container py-4">
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
               <div className="flex items-center gap-3">
                 <div className="h-12 w-12 rounded-full bg-clinic-primary/20 flex items-center justify-center">
                   <UserCircle className="h-7 w-7 text-clinic-primary" />
@@ -87,17 +138,56 @@ export default function HomePage() {
                   </p>
                 </div>
               </div>
-              <div className="flex gap-2">
-                <Link to="/minhas-consultas">
-                  <Button variant="clinic-outline" size="sm">
-                    Minhas Consultas
-                  </Button>
-                </Link>
-                <Link to="/agendar">
-                  <Button variant="clinic" size="sm">
-                    Agendar Nova
-                  </Button>
-                </Link>
+
+              {/* Upcoming Appointments Summary */}
+              <div className="flex items-center gap-4 flex-wrap">
+                {loadingAppointments ? (
+                  <div className="flex items-center gap-2 text-sm text-clinic-text-muted">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Carregando...
+                  </div>
+                ) : upcomingAppointments.length > 0 ? (
+                  <div className="flex items-center gap-3 bg-background/60 rounded-xl px-4 py-2 border border-clinic-border-subtle">
+                    <CalendarClock className="h-5 w-5 text-clinic-primary" />
+                    <div className="flex items-center gap-2 text-sm">
+                      <span className="text-clinic-text-secondary">Próximas:</span>
+                      {upcomingAppointments.slice(0, 2).map((apt, idx) => (
+                        <span key={apt.id} className="inline-flex items-center gap-1">
+                          {idx > 0 && <span className="text-clinic-text-muted">•</span>}
+                          <span className="font-medium text-foreground">
+                            {formatDateLabel(apt.appointment_date)}
+                          </span>
+                          <span className="text-clinic-primary">
+                            {apt.appointment_time.slice(0, 5)}
+                          </span>
+                        </span>
+                      ))}
+                      {upcomingAppointments.length > 2 && (
+                        <span className="text-clinic-text-muted">
+                          +{upcomingAppointments.length - 2}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2 text-sm text-clinic-text-muted bg-background/60 rounded-xl px-4 py-2 border border-clinic-border-subtle">
+                    <Calendar className="h-4 w-4" />
+                    Nenhuma consulta agendada
+                  </div>
+                )}
+
+                <div className="flex gap-2">
+                  <Link to="/minhas-consultas">
+                    <Button variant="clinic-outline" size="sm">
+                      Minhas Consultas
+                    </Button>
+                  </Link>
+                  <Link to="/agendar">
+                    <Button variant="clinic" size="sm">
+                      Agendar Nova
+                    </Button>
+                  </Link>
+                </div>
               </div>
             </div>
           </div>
