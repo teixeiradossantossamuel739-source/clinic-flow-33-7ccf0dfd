@@ -9,7 +9,7 @@ export function ThemeProvider({ children, ...props }: ThemeProviderProps) {
       defaultTheme="light"
       themes={['light', 'dark', 'futuristic']}
       enableSystem={false}
-      disableTransitionOnChange={false}
+      disableTransitionOnChange
       {...props}
     >
       {children}
