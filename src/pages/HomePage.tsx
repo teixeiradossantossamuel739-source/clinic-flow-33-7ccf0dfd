@@ -34,6 +34,11 @@ interface UpcomingAppointment {
   appointment_time: string;
   professional_id: string;
   status: string;
+  service_id: string | null;
+  services?: {
+    name: string;
+    duration_minutes: number;
+  } | null;
 }
 
 const iconMap: Record<string, React.ReactNode> = {
@@ -99,7 +104,15 @@ export default function HomePage() {
         const today = new Date().toISOString().split('T')[0];
         const { data } = await supabase
           .from('appointments')
-          .select('id, appointment_date, appointment_time, professional_id, status')
+          .select(`
+            id, 
+            appointment_date, 
+            appointment_time, 
+            professional_id, 
+            status, 
+            service_id,
+            services:service_id (name, duration_minutes)
+          `)
           .eq('patient_email', user.email.toLowerCase())
           .gte('appointment_date', today)
           .neq('status', 'cancelled')
@@ -107,7 +120,7 @@ export default function HomePage() {
           .order('appointment_time', { ascending: true })
           .limit(3);
         
-        setUpcomingAppointments(data || []);
+        setUpcomingAppointments(data as UpcomingAppointment[] || []);
       } catch (error) {
         console.error('Erro ao buscar consultas:', error);
       } finally {
@@ -160,6 +173,11 @@ export default function HomePage() {
                           <span className="text-clinic-primary">
                             {apt.appointment_time.slice(0, 5)}
                           </span>
+                          {apt.services?.name && (
+                            <span className="text-clinic-text-muted text-xs">
+                              ({apt.services.name})
+                            </span>
+                          )}
                         </span>
                       ))}
                       {upcomingAppointments.length > 2 && (
