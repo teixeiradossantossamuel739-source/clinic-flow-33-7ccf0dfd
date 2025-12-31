@@ -90,7 +90,7 @@ const formatDateLabel = (dateStr: string) => {
 };
 
 export default function HomePage() {
-  const { user, profile } = useAuth();
+  const { user, profile, isCliente } = useAuth();
   const firstName = profile?.full_name?.split(' ')[0] || '';
   const [upcomingAppointments, setUpcomingAppointments] = useState<UpcomingAppointment[]>([]);
   const [loadingAppointments, setLoadingAppointments] = useState(false);
@@ -134,7 +134,7 @@ export default function HomePage() {
   return (
     <PublicLayout>
       {/* Welcome Section for Logged Users */}
-      {user && firstName && (
+      {user && firstName && isCliente && (
         <section className="bg-gradient-to-r from-clinic-primary/10 via-clinic-primary/5 to-transparent border-b border-clinic-border-subtle animate-fade-in">
           <div className="container py-4">
             <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
