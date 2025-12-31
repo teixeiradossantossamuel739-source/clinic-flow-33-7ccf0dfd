@@ -200,6 +200,9 @@ export default function FuncionarioDashboard() {
   const handleConfirmAppointment = async (appointmentId: string) => {
     setProcessing(appointmentId);
     try {
+      const appointment = appointments.find(apt => apt.id === appointmentId);
+      if (!appointment) throw new Error('Appointment not found');
+
       const { error } = await supabase
         .from('appointments')
         .update({ status: 'confirmed' })
@@ -211,6 +214,44 @@ export default function FuncionarioDashboard() {
         prev.map(apt => apt.id === appointmentId ? { ...apt, status: 'confirmed' } : apt)
       );
       toast.success('Consulta confirmada!');
+
+      // Fetch service details for the notification
+      let serviceName = '';
+      let serviceDuration = 0;
+      if (appointment.service_id) {
+        const { data: serviceData } = await supabase
+          .from('services')
+          .select('name, duration_minutes')
+          .eq('id', appointment.service_id)
+          .single();
+        
+        if (serviceData) {
+          serviceName = serviceData.name;
+          serviceDuration = serviceData.duration_minutes;
+        }
+      }
+
+      // Generate WhatsApp notification for client
+      if (appointment.patient_phone) {
+        const { data: notifyData } = await supabase.functions.invoke('whatsapp-notify', {
+          body: {
+            type: 'confirmed_to_patient',
+            patientPhone: appointment.patient_phone,
+            patientName: appointment.patient_name,
+            appointmentDate: appointment.appointment_date,
+            appointmentTime: appointment.appointment_time,
+            serviceName,
+            serviceDuration,
+            professionalName: professional?.name,
+            appointmentId: appointment.id,
+            amountCents: appointment.amount_cents,
+          },
+        });
+
+        if (notifyData?.whatsappLink) {
+          window.open(notifyData.whatsappLink, '_blank');
+        }
+      }
     } catch (error) {
       console.error('Error confirming appointment:', error);
       toast.error('Erro ao confirmar consulta');

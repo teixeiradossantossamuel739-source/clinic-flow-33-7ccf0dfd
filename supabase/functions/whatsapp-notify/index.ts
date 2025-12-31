@@ -7,14 +7,16 @@ const corsHeaders = {
 };
 
 interface WhatsAppNotificationRequest {
-  professionalPhone: string;
+  professionalPhone?: string;
+  patientPhone?: string;
   patientName: string;
-  patientPhone: string;
   appointmentDate: string;
   appointmentTime: string;
   serviceName?: string;
+  serviceDuration?: number;
+  professionalName?: string;
   appointmentId: string;
-  type: 'new_appointment' | 'cancelled' | 'confirmed' | 'payment_analysis';
+  type: 'new_appointment' | 'cancelled' | 'confirmed' | 'payment_analysis' | 'confirmed_to_patient';
   amountCents?: number;
 }
 
@@ -76,12 +78,28 @@ serve(async (req) => {
       appointmentDate, 
       appointmentTime, 
       serviceName,
+      serviceDuration,
+      professionalName,
       appointmentId,
       type,
       amountCents
     } = body;
 
     logStep("Request received", { type, appointmentId, patientName });
+
+    // Determine target phone based on notification type
+    const targetPhone = type === 'confirmed_to_patient' ? patientPhone : professionalPhone;
+
+    if (!targetPhone) {
+      logStep("No target phone provided");
+      return new Response(JSON.stringify({ 
+        success: false, 
+        message: "Telefone do destinatário não disponível" 
+      }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 200,
+      });
+    }
 
     if (!professionalPhone) {
       logStep("No professional phone provided");
@@ -95,9 +113,11 @@ serve(async (req) => {
     }
 
     const formattedDate = formatDate(appointmentDate);
+    const formattedTime = appointmentTime.slice(0, 5);
     let message = '';
 
-    const formattedAmount = amountCents ? `R$ ${(amountCents / 100).toFixed(2)}` : '';
+    const formattedAmount = amountCents ? `R$ ${(amountCents / 100).toFixed(2).replace('.', ',')}` : '';
+    const formattedDuration = serviceDuration ? (serviceDuration < 60 ? `${serviceDuration} min` : `${Math.floor(serviceDuration / 60)}h${serviceDuration % 60 > 0 ? ` ${serviceDuration % 60}min` : ''}`) : '';
 
     switch (type) {
       case 'new_appointment':
@@ -106,7 +126,7 @@ serve(async (req) => {
 📋 *Paciente:* ${patientName}
 📱 *WhatsApp:* ${patientPhone}
 📅 *Data:* ${formattedDate}
-⏰ *Horário:* ${appointmentTime}
+⏰ *Horário:* ${formattedTime}
 ${serviceName ? `🏥 *Serviço:* ${serviceName}` : ''}
 
 Acesse o painel para confirmar ou cancelar.`;
@@ -120,11 +140,28 @@ Acesse o painel para confirmar ou cancelar.`;
 📋 *Paciente:* ${patientName}
 📱 *WhatsApp:* ${patientPhone}
 📅 *Data:* ${formattedDate}
-⏰ *Horário:* ${appointmentTime}
+⏰ *Horário:* ${formattedTime}
 ${serviceName ? `🏥 *Serviço:* ${serviceName}` : ''}
 ${formattedAmount ? `💰 *Valor:* ${formattedAmount}` : ''}
 
 👉 Acesse o painel e clique em *Confirmar Pagamento* após verificar.`;
+        break;
+
+      case 'confirmed_to_patient':
+        message = `✅ *Sua consulta foi confirmada!*
+
+Olá, ${patientName}! 😊
+
+Sua consulta foi confirmada com sucesso.
+
+📅 *Data:* ${formattedDate}
+⏰ *Horário:* ${formattedTime}
+${formattedDuration ? `🕒 *Duração:* ${formattedDuration}` : ''}
+${serviceName ? `🩺 *Serviço:* ${serviceName}` : ''}
+${professionalName ? `👨‍⚕️ *Profissional:* ${professionalName}` : ''}
+${formattedAmount ? `💰 *Valor:* ${formattedAmount}` : ''}
+
+Aguardamos você! Qualquer dúvida, estamos à disposição.`;
         break;
         
       case 'confirmed':
@@ -132,7 +169,7 @@ ${formattedAmount ? `💰 *Valor:* ${formattedAmount}` : ''}
 
 📋 *Paciente:* ${patientName}
 📅 *Data:* ${formattedDate}
-⏰ *Horário:* ${appointmentTime}
+⏰ *Horário:* ${formattedTime}
 
 Agendamento confirmado com sucesso!`;
         break;
@@ -142,18 +179,18 @@ Agendamento confirmado com sucesso!`;
 
 📋 *Paciente:* ${patientName}
 📅 *Data:* ${formattedDate}
-⏰ *Horário:* ${appointmentTime}
+⏰ *Horário:* ${formattedTime}
 
 Este horário está agora disponível.`;
         break;
         
       default:
-        message = `📋 Notificação sobre agendamento de ${patientName} em ${formattedDate} às ${appointmentTime}`;
+        message = `📋 Notificação sobre agendamento de ${patientName} em ${formattedDate} às ${formattedTime}`;
     }
 
-    const whatsappLink = generateWhatsAppLink(professionalPhone, message);
+    const whatsappLink = generateWhatsAppLink(targetPhone, message);
 
-    logStep("WhatsApp link generated", { whatsappLink: whatsappLink.substring(0, 50) + '...' });
+    logStep("WhatsApp link generated", { type, whatsappLink: whatsappLink.substring(0, 50) + '...' });
 
     return new Response(JSON.stringify({ 
       success: true,
