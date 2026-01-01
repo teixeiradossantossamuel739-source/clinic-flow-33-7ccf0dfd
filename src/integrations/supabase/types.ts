@@ -14,6 +14,39 @@ export type Database = {
   }
   public: {
     Tables: {
+      appointment_reviews: {
+        Row: {
+          appointment_id: string
+          comment: string | null
+          created_at: string
+          id: string
+          patient_email: string
+          professional_id: string
+          rating: number
+          updated_at: string
+        }
+        Insert: {
+          appointment_id: string
+          comment?: string | null
+          created_at?: string
+          id?: string
+          patient_email: string
+          professional_id: string
+          rating: number
+          updated_at?: string
+        }
+        Update: {
+          appointment_id?: string
+          comment?: string | null
+          created_at?: string
+          id?: string
+          patient_email?: string
+          professional_id?: string
+          rating?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       appointments: {
         Row: {
           amount_cents: number

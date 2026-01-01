@@ -41,7 +41,9 @@ import {
   FileText,
   Download,
   Pencil,
+  Star,
 } from 'lucide-react';
+import { Textarea } from '@/components/ui/textarea';
 import { format, addDays, isBefore, startOfDay } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { toast } from 'sonner';
@@ -74,6 +76,13 @@ interface Professional {
   id: string;
   name: string;
   phone: string | null;
+}
+
+interface AppointmentReview {
+  id: string;
+  appointment_id: string;
+  rating: number;
+  comment: string | null;
 }
 
 const statusConfig: Record<string, { label: string; className: string }> = {
@@ -143,6 +152,14 @@ export default function MinhasConsultas() {
   const [editWhatsapp, setEditWhatsapp] = useState('');
   const [savingProfile, setSavingProfile] = useState(false);
 
+  // Review state
+  const [reviews, setReviews] = useState<AppointmentReview[]>([]);
+  const [reviewDialogOpen, setReviewDialogOpen] = useState(false);
+  const [reviewRating, setReviewRating] = useState(0);
+  const [reviewComment, setReviewComment] = useState('');
+  const [savingReview, setSavingReview] = useState(false);
+  const [hoverRating, setHoverRating] = useState(0);
+
   // Auto-fetch for logged-in users
   useEffect(() => {
     if (user?.email) {
@@ -155,7 +172,7 @@ export default function MinhasConsultas() {
     setLoading(true);
     setSearched(true);
 
-    const [apptRes, profRes, servRes] = await Promise.all([
+    const [apptRes, profRes, servRes, reviewsRes] = await Promise.all([
       supabase
         .from('appointments')
         .select('*')
@@ -163,6 +180,7 @@ export default function MinhasConsultas() {
         .order('appointment_date', { ascending: false }),
       supabase.from('professionals').select('id, name, phone'),
       supabase.from('services').select('id, name, description, duration_minutes, price_cents'),
+      supabase.from('appointment_reviews').select('id, appointment_id, rating, comment').eq('patient_email', searchEmail.toLowerCase().trim()),
     ]);
 
     if (apptRes.error) {
@@ -178,6 +196,10 @@ export default function MinhasConsultas() {
 
     if (servRes.data) {
       setServices(servRes.data);
+    }
+
+    if (reviewsRes.data) {
+      setReviews(reviewsRes.data);
     }
 
     setLoading(false);
@@ -538,6 +560,80 @@ export default function MinhasConsultas() {
     setEditProfileDialogOpen(false);
   };
 
+  const getReviewForAppointment = (appointmentId: string) => {
+    return reviews.find((r) => r.appointment_id === appointmentId);
+  };
+
+  const handleReviewClick = (apt: Appointment) => {
+    setSelectedAppointment(apt);
+    const existingReview = getReviewForAppointment(apt.id);
+    if (existingReview) {
+      setReviewRating(existingReview.rating);
+      setReviewComment(existingReview.comment || '');
+    } else {
+      setReviewRating(0);
+      setReviewComment('');
+    }
+    setReviewDialogOpen(true);
+  };
+
+  const handleSaveReview = async () => {
+    if (!selectedAppointment || reviewRating === 0) return;
+
+    setSavingReview(true);
+    const existingReview = getReviewForAppointment(selectedAppointment.id);
+
+    if (existingReview) {
+      // Update existing review
+      const { error } = await supabase
+        .from('appointment_reviews')
+        .update({
+          rating: reviewRating,
+          comment: reviewComment.trim() || null,
+        })
+        .eq('id', existingReview.id);
+
+      if (error) {
+        console.error('Error updating review:', error);
+        toast.error('Erro ao atualizar avaliação');
+      } else {
+        toast.success('Avaliação atualizada com sucesso!');
+        setReviews((prev) =>
+          prev.map((r) =>
+            r.id === existingReview.id
+              ? { ...r, rating: reviewRating, comment: reviewComment.trim() || null }
+              : r
+          )
+        );
+      }
+    } else {
+      // Create new review
+      const { data, error } = await supabase
+        .from('appointment_reviews')
+        .insert({
+          appointment_id: selectedAppointment.id,
+          patient_email: selectedAppointment.patient_email,
+          professional_id: selectedAppointment.professional_uuid,
+          rating: reviewRating,
+          comment: reviewComment.trim() || null,
+        })
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Error creating review:', error);
+        toast.error('Erro ao salvar avaliação');
+      } else {
+        toast.success('Avaliação enviada com sucesso!');
+        setReviews((prev) => [...prev, data]);
+      }
+    }
+
+    setSavingReview(false);
+    setReviewDialogOpen(false);
+    setSelectedAppointment(null);
+  };
+
   const handleConfirmCancel = async () => {
     if (!selectedAppointment) return;
 
@@ -607,6 +703,8 @@ export default function MinhasConsultas() {
     const status = statusConfig[apt.status] || statusConfig.pending;
     const service = getService(apt.service_id);
     const showActions = canModifyAppointment(apt.status);
+    const existingReview = getReviewForAppointment(apt.id);
+    const isCompleted = apt.status === 'completed';
 
     return (
       <div
@@ -643,6 +741,26 @@ export default function MinhasConsultas() {
               <span>{getProfessionalName(apt.professional_uuid)}</span>
             </div>
 
+            {/* Review Stars (for completed appointments) */}
+            {isCompleted && existingReview && (
+              <div className="flex items-center gap-1 mt-1">
+                {[1, 2, 3, 4, 5].map((star) => (
+                  <Star
+                    key={star}
+                    className={cn(
+                      'h-4 w-4',
+                      star <= existingReview.rating
+                        ? 'fill-yellow-400 text-yellow-400'
+                        : 'text-muted-foreground/30'
+                    )}
+                  />
+                ))}
+                <span className="text-xs text-clinic-text-muted ml-1">
+                  ({existingReview.rating}/5)
+                </span>
+              </div>
+            )}
+
             {/* Action Buttons */}
             <div className="flex flex-wrap gap-2 mt-2">
               <Button
@@ -675,6 +793,17 @@ export default function MinhasConsultas() {
                     Cancelar
                   </Button>
                 </>
+              )}
+              {isCompleted && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => handleReviewClick(apt)}
+                  className="w-fit text-yellow-600 hover:text-yellow-600 hover:bg-yellow-50"
+                >
+                  <Star className="h-4 w-4 mr-1" />
+                  {existingReview ? 'Editar avaliação' : 'Avaliar'}
+                </Button>
               )}
             </div>
           </div>
@@ -1154,6 +1283,88 @@ export default function MinhasConsultas() {
                 <Loader2 className="h-4 w-4 animate-spin mr-2" />
               ) : null}
               Salvar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Review Dialog */}
+      <Dialog open={reviewDialogOpen} onOpenChange={setReviewDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Avaliar Consulta</DialogTitle>
+            <DialogDescription>
+              Como foi sua experiência? Sua avaliação ajuda a melhorar nossos serviços.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-6 py-4">
+            {/* Star Rating */}
+            <div className="space-y-2">
+              <Label className="text-center block">Sua avaliação</Label>
+              <div className="flex justify-center gap-2">
+                {[1, 2, 3, 4, 5].map((star) => (
+                  <button
+                    key={star}
+                    type="button"
+                    onClick={() => setReviewRating(star)}
+                    onMouseEnter={() => setHoverRating(star)}
+                    onMouseLeave={() => setHoverRating(0)}
+                    className="p-1 transition-transform hover:scale-110 focus:outline-none"
+                  >
+                    <Star
+                      className={cn(
+                        'h-8 w-8 transition-colors',
+                        (hoverRating || reviewRating) >= star
+                          ? 'fill-yellow-400 text-yellow-400'
+                          : 'text-muted-foreground/30'
+                      )}
+                    />
+                  </button>
+                ))}
+              </div>
+              <p className="text-center text-sm text-clinic-text-muted">
+                {reviewRating === 0 && 'Clique para avaliar'}
+                {reviewRating === 1 && 'Muito ruim'}
+                {reviewRating === 2 && 'Ruim'}
+                {reviewRating === 3 && 'Regular'}
+                {reviewRating === 4 && 'Bom'}
+                {reviewRating === 5 && 'Excelente'}
+              </p>
+            </div>
+
+            {/* Comment */}
+            <div className="space-y-2">
+              <Label htmlFor="review-comment">Comentário (opcional)</Label>
+              <Textarea
+                id="review-comment"
+                value={reviewComment}
+                onChange={(e) => setReviewComment(e.target.value)}
+                placeholder="Conte como foi sua experiência..."
+                rows={4}
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setReviewDialogOpen(false)}
+              disabled={savingReview}
+            >
+              Cancelar
+            </Button>
+            <Button
+              onClick={handleSaveReview}
+              disabled={reviewRating === 0 || savingReview}
+              className="bg-yellow-500 text-white hover:bg-yellow-600"
+            >
+              {savingReview ? (
+                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+              ) : (
+                <Star className="h-4 w-4 mr-2" />
+              )}
+              Enviar Avaliação
             </Button>
           </DialogFooter>
         </DialogContent>
