@@ -16,8 +16,10 @@ interface WhatsAppNotificationRequest {
   serviceDuration?: number;
   professionalName?: string;
   appointmentId: string;
-  type: 'new_appointment' | 'cancelled' | 'confirmed' | 'payment_analysis' | 'confirmed_to_patient';
+  type: 'new_appointment' | 'cancelled' | 'confirmed' | 'payment_analysis' | 'confirmed_to_patient' | 'cancelled_by_patient' | 'rescheduled_by_patient';
   amountCents?: number;
+  newAppointmentDate?: string;
+  newAppointmentTime?: string;
 }
 
 const logStep = (step: string, details?: any) => {
@@ -82,7 +84,9 @@ serve(async (req) => {
       professionalName,
       appointmentId,
       type,
-      amountCents
+      amountCents,
+      newAppointmentDate,
+      newAppointmentTime
     } = body;
 
     logStep("Request received", { type, appointmentId, patientName });
@@ -182,6 +186,37 @@ Agendamento confirmado com sucesso!`;
 ⏰ *Horário:* ${formattedTime}
 
 Este horário está agora disponível.`;
+        break;
+
+      case 'cancelled_by_patient':
+        message = `❌ *Cancelamento pelo Paciente*
+
+O paciente cancelou sua consulta.
+
+📋 *Paciente:* ${patientName}
+📱 *WhatsApp:* ${patientPhone}
+📅 *Data:* ${formattedDate}
+⏰ *Horário:* ${formattedTime}
+${serviceName ? `🏥 *Serviço:* ${serviceName}` : ''}
+
+Este horário está agora disponível para novos agendamentos.`;
+        break;
+
+      case 'rescheduled_by_patient':
+        const newFormattedDate = newAppointmentDate ? formatDate(newAppointmentDate) : '';
+        const newFormattedTime = newAppointmentTime ? newAppointmentTime.slice(0, 5) : '';
+        message = `📅 *Reagendamento pelo Paciente*
+
+O paciente reagendou sua consulta.
+
+📋 *Paciente:* ${patientName}
+📱 *WhatsApp:* ${patientPhone}
+
+❌ *Data anterior:* ${formattedDate} às ${formattedTime}
+✅ *Nova data:* ${newFormattedDate} às ${newFormattedTime}
+${serviceName ? `🏥 *Serviço:* ${serviceName}` : ''}
+
+Acesse o painel para confirmar o reagendamento.`;
         break;
         
       default:
