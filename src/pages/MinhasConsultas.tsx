@@ -36,6 +36,9 @@ import {
   Phone,
   X,
   RefreshCw,
+  Eye,
+  CreditCard,
+  FileText,
 } from 'lucide-react';
 import { format, addDays, isBefore, startOfDay } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -45,6 +48,7 @@ import { cn } from '@/lib/utils';
 interface Service {
   id: string;
   name: string;
+  description: string | null;
   duration_minutes: number;
   price_cents: number;
 }
@@ -127,6 +131,9 @@ export default function MinhasConsultas() {
   const [loadingSlots, setLoadingSlots] = useState(false);
   const [rescheduling, setRescheduling] = useState(false);
 
+  // Details modal state
+  const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);
+
   // Auto-fetch for logged-in users
   useEffect(() => {
     if (user?.email) {
@@ -146,7 +153,7 @@ export default function MinhasConsultas() {
         .eq('patient_email', searchEmail.toLowerCase().trim())
         .order('appointment_date', { ascending: false }),
       supabase.from('professionals').select('id, name, phone'),
-      supabase.from('services').select('id, name, duration_minutes, price_cents'),
+      supabase.from('services').select('id, name, description, duration_minutes, price_cents'),
     ]);
 
     if (apptRes.error) {
@@ -326,6 +333,23 @@ export default function MinhasConsultas() {
     setCancelDialogOpen(true);
   };
 
+  const handleDetailsClick = (apt: Appointment) => {
+    setSelectedAppointment(apt);
+    setDetailsDialogOpen(true);
+  };
+
+  const getProfessional = (uuid: string | null) => {
+    if (!uuid) return null;
+    return professionals.find((p) => p.id === uuid) || null;
+  };
+
+  const paymentStatusConfig: Record<string, { label: string; className: string }> = {
+    pending: { label: 'Aguardando', className: 'bg-warning/20 text-warning border-warning/30' },
+    paid: { label: 'Pago', className: 'bg-success/20 text-success border-success/30' },
+    failed: { label: 'Falhou', className: 'bg-destructive/20 text-destructive border-destructive/30' },
+    refunded: { label: 'Reembolsado', className: 'bg-muted text-muted-foreground border-border' },
+  };
+
   const handleConfirmCancel = async () => {
     if (!selectedAppointment) return;
 
@@ -406,28 +430,39 @@ export default function MinhasConsultas() {
             </div>
 
             {/* Action Buttons */}
-            {showActions && (
-              <div className="flex flex-wrap gap-2 mt-2">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => handleRescheduleClick(apt)}
-                  className="w-fit text-clinic-primary hover:text-clinic-primary hover:bg-clinic-primary/10"
-                >
-                  <RefreshCw className="h-4 w-4 mr-1" />
-                  Reagendar
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => handleCancelClick(apt)}
-                  className="w-fit text-destructive hover:text-destructive hover:bg-destructive/10"
-                >
-                  <X className="h-4 w-4 mr-1" />
-                  Cancelar
-                </Button>
-              </div>
-            )}
+            <div className="flex flex-wrap gap-2 mt-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => handleDetailsClick(apt)}
+                className="w-fit text-foreground hover:bg-muted"
+              >
+                <Eye className="h-4 w-4 mr-1" />
+                Ver detalhes
+              </Button>
+              {showActions && (
+                <>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => handleRescheduleClick(apt)}
+                    className="w-fit text-clinic-primary hover:text-clinic-primary hover:bg-clinic-primary/10"
+                  >
+                    <RefreshCw className="h-4 w-4 mr-1" />
+                    Reagendar
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => handleCancelClick(apt)}
+                    className="w-fit text-destructive hover:text-destructive hover:bg-destructive/10"
+                  >
+                    <X className="h-4 w-4 mr-1" />
+                    Cancelar
+                  </Button>
+                </>
+              )}
+            </div>
           </div>
 
           {/* Right: Status Badge */}
@@ -695,6 +730,128 @@ export default function MinhasConsultas() {
                 <Loader2 className="h-4 w-4 animate-spin mr-2" />
               ) : null}
               Confirmar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Details Dialog */}
+      <Dialog open={detailsDialogOpen} onOpenChange={setDetailsDialogOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Detalhes da Consulta</DialogTitle>
+            <DialogDescription>
+              Informações completas do seu agendamento
+            </DialogDescription>
+          </DialogHeader>
+
+          {selectedAppointment && (() => {
+            const service = getService(selectedAppointment.service_id);
+            const professional = getProfessional(selectedAppointment.professional_uuid);
+            const status = statusConfig[selectedAppointment.status] || statusConfig.pending;
+            const paymentStatus = paymentStatusConfig[selectedAppointment.payment_status] || paymentStatusConfig.pending;
+
+            return (
+              <div className="space-y-6 py-4">
+                {/* Service Info */}
+                <div className="space-y-2">
+                  <h3 className="font-semibold text-foreground flex items-center gap-2">
+                    <FileText className="h-4 w-4" />
+                    Serviço
+                  </h3>
+                  <div className="bg-muted/50 rounded-lg p-4 space-y-2">
+                    <p className="font-medium text-foreground">{service?.name || 'Consulta'}</p>
+                    {service?.description && (
+                      <p className="text-sm text-clinic-text-secondary">{service.description}</p>
+                    )}
+                    <div className="flex flex-wrap gap-4 text-sm text-clinic-text-secondary">
+                      <span>Duração: {service ? formatDuration(service.duration_minutes) : '30 minutos'}</span>
+                      <span>Valor: R$ {(selectedAppointment.amount_cents / 100).toFixed(2).replace('.', ',')}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Date & Time */}
+                <div className="space-y-2">
+                  <h3 className="font-semibold text-foreground flex items-center gap-2">
+                    <Calendar className="h-4 w-4" />
+                    Data e Horário
+                  </h3>
+                  <div className="bg-muted/50 rounded-lg p-4 space-y-1">
+                    <p className="font-medium text-foreground">
+                      {format(new Date(selectedAppointment.appointment_date), "EEEE, dd 'de' MMMM 'de' yyyy", { locale: ptBR })}
+                    </p>
+                    <p className="text-sm text-clinic-text-secondary flex items-center gap-2">
+                      <Clock className="h-4 w-4" />
+                      {selectedAppointment.appointment_time}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Professional */}
+                <div className="space-y-2">
+                  <h3 className="font-semibold text-foreground flex items-center gap-2">
+                    <User className="h-4 w-4" />
+                    Profissional
+                  </h3>
+                  <div className="bg-muted/50 rounded-lg p-4 space-y-1">
+                    <p className="font-medium text-foreground">{professional?.name || 'Profissional não definido'}</p>
+                    {professional?.phone && (
+                      <p className="text-sm text-clinic-text-secondary flex items-center gap-2">
+                        <Phone className="h-4 w-4" />
+                        {professional.phone}
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                {/* Patient Info */}
+                <div className="space-y-2">
+                  <h3 className="font-semibold text-foreground flex items-center gap-2">
+                    <Mail className="h-4 w-4" />
+                    Dados do Paciente
+                  </h3>
+                  <div className="bg-muted/50 rounded-lg p-4 space-y-1">
+                    <p className="font-medium text-foreground">{selectedAppointment.patient_name}</p>
+                    <p className="text-sm text-clinic-text-secondary">{selectedAppointment.patient_email}</p>
+                    <p className="text-sm text-clinic-text-secondary flex items-center gap-2">
+                      <Phone className="h-4 w-4" />
+                      {selectedAppointment.patient_phone}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Status & Payment */}
+                <div className="space-y-2">
+                  <h3 className="font-semibold text-foreground flex items-center gap-2">
+                    <CreditCard className="h-4 w-4" />
+                    Status
+                  </h3>
+                  <div className="flex flex-wrap gap-3">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm text-clinic-text-secondary">Consulta:</span>
+                      <Badge variant="outline" className={`text-xs font-medium px-3 py-1 ${status.className}`}>
+                        {status.label}
+                      </Badge>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm text-clinic-text-secondary">Pagamento:</span>
+                      <Badge variant="outline" className={`text-xs font-medium px-3 py-1 ${paymentStatus.className}`}>
+                        {paymentStatus.label}
+                      </Badge>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setDetailsDialogOpen(false)}
+            >
+              Fechar
             </Button>
           </DialogFooter>
         </DialogContent>
