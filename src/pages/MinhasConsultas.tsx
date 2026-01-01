@@ -5,6 +5,16 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import {
@@ -15,6 +25,7 @@ import {
   User,
   Mail,
   Phone,
+  X,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -93,6 +104,9 @@ export default function MinhasConsultas() {
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
+  const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
+  const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null);
+  const [cancelling, setCancelling] = useState(false);
 
   // Auto-fetch for logged-in users
   useEffect(() => {
@@ -160,6 +174,42 @@ export default function MinhasConsultas() {
     return mins > 0 ? `${hours}h ${mins}min` : `${hours}h`;
   };
 
+  const canCancelAppointment = (status: string) => {
+    return ['pending', 'confirmed', 'awaiting_confirmation'].includes(status);
+  };
+
+  const handleCancelClick = (apt: Appointment) => {
+    setSelectedAppointment(apt);
+    setCancelDialogOpen(true);
+  };
+
+  const handleConfirmCancel = async () => {
+    if (!selectedAppointment) return;
+
+    setCancelling(true);
+    const { error } = await supabase
+      .from('appointments')
+      .update({ status: 'cancelled' })
+      .eq('id', selectedAppointment.id);
+
+    if (error) {
+      console.error('Error cancelling appointment:', error);
+      toast.error('Erro ao cancelar agendamento');
+    } else {
+      toast.success('Agendamento cancelado com sucesso');
+      // Update local state
+      setAppointments((prev) =>
+        prev.map((apt) =>
+          apt.id === selectedAppointment.id ? { ...apt, status: 'cancelled' } : apt
+        )
+      );
+    }
+
+    setCancelling(false);
+    setCancelDialogOpen(false);
+    setSelectedAppointment(null);
+  };
+
   // Filter and sort appointments
   const filteredAppointments = appointments.filter((apt) => {
     if (statusFilter === 'all') return true;
@@ -175,6 +225,7 @@ export default function MinhasConsultas() {
   const renderAppointmentCard = (apt: Appointment) => {
     const status = statusConfig[apt.status] || statusConfig.pending;
     const service = getService(apt.service_id);
+    const showCancelButton = canCancelAppointment(apt.status);
 
     return (
       <div
@@ -210,6 +261,19 @@ export default function MinhasConsultas() {
               <User className="h-4 w-4" />
               <span>{getProfessionalName(apt.professional_uuid)}</span>
             </div>
+
+            {/* Cancel Button */}
+            {showCancelButton && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => handleCancelClick(apt)}
+                className="w-fit mt-2 text-destructive hover:text-destructive hover:bg-destructive/10"
+              >
+                <X className="h-4 w-4 mr-1" />
+                Cancelar
+              </Button>
+            )}
           </div>
 
           {/* Right: Status Badge */}
@@ -374,6 +438,30 @@ export default function MinhasConsultas() {
         </div>
       </div>
 
+      {/* Cancel Confirmation Dialog */}
+      <AlertDialog open={cancelDialogOpen} onOpenChange={setCancelDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Cancelar agendamento?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tem certeza que deseja cancelar este agendamento? Esta ação não pode ser desfeita.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={cancelling}>Não, manter</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleConfirmCancel}
+              disabled={cancelling}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {cancelling ? (
+                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+              ) : null}
+              Sim, cancelar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </PublicLayout>
   );
 }
