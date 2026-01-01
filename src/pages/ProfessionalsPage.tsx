@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { PublicLayout } from '@/components/layout/PublicLayout';
 import { supabase } from '@/integrations/supabase/client';
-import { Star, Calendar, ArrowRight, Loader2, User } from 'lucide-react';
+import { Star, Calendar, ArrowRight, Loader2, User, Quote, MessageSquare } from 'lucide-react';
 
 interface Professional {
   id: string;
@@ -17,6 +17,15 @@ interface Professional {
   review_count: number | null;
 }
 
+interface Review {
+  id: string;
+  professional_id: string;
+  patient_email: string;
+  rating: number;
+  comment: string | null;
+  created_at: string;
+}
+
 interface ProfessionalReviewStats {
   professional_id: string;
   avg_rating: number;
@@ -26,6 +35,7 @@ interface ProfessionalReviewStats {
 export default function ProfessionalsPage() {
   const [professionals, setProfessionals] = useState<Professional[]>([]);
   const [reviewStats, setReviewStats] = useState<Record<string, ProfessionalReviewStats>>({});
+  const [reviews, setReviews] = useState<Review[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -39,16 +49,17 @@ export default function ProfessionalsPage() {
         .eq('is_active', true)
         .order('name');
 
-      // Fetch review stats
+      // Fetch all reviews with comments
       const { data: reviewData } = await supabase
         .from('appointment_reviews')
-        .select('professional_id, rating');
+        .select('id, professional_id, patient_email, rating, comment, created_at')
+        .order('created_at', { ascending: false });
 
       if (profData) {
         setProfessionals(profData);
       }
 
-      // Calculate review stats per professional
+      // Calculate review stats per professional and store reviews
       if (reviewData) {
         const stats: Record<string, { total: number; sum: number }> = {};
         reviewData.forEach((review) => {
@@ -69,6 +80,7 @@ export default function ProfessionalsPage() {
           };
         });
         setReviewStats(formattedStats);
+        setReviews(reviewData as Review[]);
       }
 
       setLoading(false);
@@ -80,6 +92,31 @@ export default function ProfessionalsPage() {
   const getReviewStats = (profId: string) => {
     return reviewStats[profId] || null;
   };
+
+  const getProfessionalName = (profId: string) => {
+    const prof = professionals.find(p => p.id === profId);
+    return prof?.name || 'Profissional';
+  };
+
+  const maskEmail = (email: string) => {
+    const [local, domain] = email.split('@');
+    if (!domain) return email;
+    const maskedLocal = local.substring(0, 2) + '***';
+    return `${maskedLocal}@${domain}`;
+  };
+
+  const formatDate = (dateStr: string) => {
+    return new Date(dateStr).toLocaleDateString('pt-BR', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+    });
+  };
+
+  // Get featured reviews (with comments, max 6)
+  const featuredReviews = reviews
+    .filter(r => r.comment && r.comment.trim().length > 0)
+    .slice(0, 6);
 
   const specialtyNames: Record<string, string> = {
     clinico_geral: 'Clínico Geral',
@@ -210,8 +247,71 @@ export default function ProfessionalsPage() {
         </div>
       </section>
 
+      {/* Patient Testimonials Section */}
+      {!loading && featuredReviews.length > 0 && (
+        <section className="py-16 bg-clinic-surface">
+          <div className="container">
+            <div className="text-center mb-12">
+              <div className="inline-flex items-center gap-2 bg-clinic-primary/10 text-clinic-primary px-4 py-2 rounded-full mb-4">
+                <MessageSquare className="h-4 w-4" />
+                <span className="text-sm font-medium">Depoimentos</span>
+              </div>
+              <h2 className="text-3xl font-bold mb-4">O que nossos pacientes dizem</h2>
+              <p className="text-clinic-text-secondary max-w-2xl mx-auto">
+                Confira a experiência de quem já foi atendido por nossos profissionais.
+              </p>
+            </div>
+
+            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {featuredReviews.map((review) => (
+                <div
+                  key={review.id}
+                  className="bg-background border border-clinic-border-subtle rounded-2xl p-6 relative hover:shadow-clinic-lg transition-all"
+                >
+                  <Quote className="absolute top-4 right-4 h-8 w-8 text-clinic-primary/10" />
+                  
+                  {/* Stars */}
+                  <div className="flex items-center gap-0.5 mb-4">
+                    {[1, 2, 3, 4, 5].map((star) => (
+                      <Star
+                        key={star}
+                        className={`h-4 w-4 ${
+                          star <= review.rating
+                            ? 'fill-yellow-400 text-yellow-400'
+                            : 'text-muted-foreground/30'
+                        }`}
+                      />
+                    ))}
+                  </div>
+
+                  {/* Comment */}
+                  <p className="text-clinic-text-secondary mb-4 line-clamp-4">
+                    "{review.comment}"
+                  </p>
+
+                  {/* Author Info */}
+                  <div className="flex items-center justify-between pt-4 border-t border-clinic-border-subtle">
+                    <div>
+                      <p className="text-sm font-medium text-foreground">
+                        {maskEmail(review.patient_email)}
+                      </p>
+                      <p className="text-xs text-clinic-text-muted">
+                        Paciente de {getProfessionalName(review.professional_id)}
+                      </p>
+                    </div>
+                    <p className="text-xs text-clinic-text-muted">
+                      {formatDate(review.created_at)}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+      )}
+
       {/* CTA */}
-      <section className="py-16 bg-clinic-surface">
+      <section className="py-16 bg-background">
         <div className="container">
           <div className="text-center max-w-2xl mx-auto">
             <h2 className="text-2xl font-bold mb-4">Pronto para agendar?</h2>
