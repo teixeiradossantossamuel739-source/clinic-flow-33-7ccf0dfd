@@ -40,6 +40,7 @@ import {
   CreditCard,
   FileText,
   Download,
+  Pencil,
 } from 'lucide-react';
 import { format, addDays, isBefore, startOfDay } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -135,6 +136,12 @@ export default function MinhasConsultas() {
 
   // Details modal state
   const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);
+
+  // Edit profile state
+  const [editProfileDialogOpen, setEditProfileDialogOpen] = useState(false);
+  const [editFullName, setEditFullName] = useState('');
+  const [editWhatsapp, setEditWhatsapp] = useState('');
+  const [savingProfile, setSavingProfile] = useState(false);
 
   // Auto-fetch for logged-in users
   useEffect(() => {
@@ -469,6 +476,37 @@ export default function MinhasConsultas() {
     toast.success('Comprovante baixado com sucesso!');
   };
 
+  const handleEditProfileClick = () => {
+    setEditFullName(profile?.full_name || '');
+    setEditWhatsapp(profile?.whatsapp || '');
+    setEditProfileDialogOpen(true);
+  };
+
+  const handleSaveProfile = async () => {
+    if (!user) return;
+
+    setSavingProfile(true);
+    const { error } = await supabase
+      .from('profiles')
+      .update({
+        full_name: editFullName.trim(),
+        whatsapp: editWhatsapp.trim(),
+      })
+      .eq('user_id', user.id);
+
+    if (error) {
+      console.error('Error updating profile:', error);
+      toast.error('Erro ao atualizar perfil');
+    } else {
+      toast.success('Perfil atualizado com sucesso!');
+      // Reload page to refresh profile data from context
+      window.location.reload();
+    }
+
+    setSavingProfile(false);
+    setEditProfileDialogOpen(false);
+  };
+
   const handleConfirmCancel = async () => {
     if (!selectedAppointment) return;
 
@@ -614,33 +652,46 @@ export default function MinhasConsultas() {
             {/* Client Profile Card */}
             {user && profile && (
               <div className="bg-background rounded-xl p-5 border border-clinic-border-subtle mb-6">
-                <div className="flex flex-col gap-3">
-                  {/* Nome */}
-                  <div className="flex items-center gap-3">
-                    <div className="h-10 w-10 rounded-full bg-clinic-primary/10 flex items-center justify-center">
-                      <User className="h-5 w-5 text-clinic-primary" />
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex flex-col gap-3 flex-1">
+                    {/* Nome */}
+                    <div className="flex items-center gap-3">
+                      <div className="h-10 w-10 rounded-full bg-clinic-primary/10 flex items-center justify-center">
+                        <User className="h-5 w-5 text-clinic-primary" />
+                      </div>
+                      <div>
+                        <p className="font-bold text-foreground">
+                          {profile.full_name || 'Cliente'}
+                        </p>
+                        <p className="text-xs text-clinic-text-muted">Cliente</p>
+                      </div>
                     </div>
-                    <div>
-                      <p className="font-bold text-foreground">
-                        {profile.full_name || 'Cliente'}
-                      </p>
-                      <p className="text-xs text-clinic-text-muted">Cliente</p>
-                    </div>
-                  </div>
-                  
-                  {/* Email */}
-                  <div className="flex items-center gap-2 text-sm text-clinic-text-secondary">
-                    <Mail className="h-4 w-4" />
-                    <span>{profile.email}</span>
-                  </div>
-                  
-                  {/* WhatsApp */}
-                  {profile.whatsapp && (
+                    
+                    {/* Email */}
                     <div className="flex items-center gap-2 text-sm text-clinic-text-secondary">
-                      <Phone className="h-4 w-4" />
-                      <span>{profile.whatsapp}</span>
+                      <Mail className="h-4 w-4" />
+                      <span>{profile.email}</span>
                     </div>
-                  )}
+                    
+                    {/* WhatsApp */}
+                    {profile.whatsapp && (
+                      <div className="flex items-center gap-2 text-sm text-clinic-text-secondary">
+                        <Phone className="h-4 w-4" />
+                        <span>{profile.whatsapp}</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Edit Button */}
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleEditProfileClick}
+                    className="text-clinic-primary hover:text-clinic-primary hover:bg-clinic-primary/10"
+                  >
+                    <Pencil className="h-4 w-4 mr-1" />
+                    Editar
+                  </Button>
                 </div>
               </div>
             )}
@@ -980,6 +1031,72 @@ export default function MinhasConsultas() {
               className="w-full sm:w-auto"
             >
               Fechar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Profile Dialog */}
+      <Dialog open={editProfileDialogOpen} onOpenChange={setEditProfileDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Editar Perfil</DialogTitle>
+            <DialogDescription>
+              Atualize suas informações pessoais
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="edit-full-name">Nome completo</Label>
+              <Input
+                id="edit-full-name"
+                value={editFullName}
+                onChange={(e) => setEditFullName(e.target.value)}
+                placeholder="Seu nome completo"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="edit-whatsapp">WhatsApp</Label>
+              <Input
+                id="edit-whatsapp"
+                value={editWhatsapp}
+                onChange={(e) => setEditWhatsapp(e.target.value)}
+                placeholder="(11) 99999-9999"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label>Email</Label>
+              <Input
+                value={profile?.email || ''}
+                disabled
+                className="bg-muted"
+              />
+              <p className="text-xs text-clinic-text-muted">
+                O email não pode ser alterado
+              </p>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setEditProfileDialogOpen(false)}
+              disabled={savingProfile}
+            >
+              Cancelar
+            </Button>
+            <Button
+              onClick={handleSaveProfile}
+              disabled={savingProfile || !editFullName.trim()}
+              className="bg-clinic-primary text-primary-foreground hover:bg-clinic-primary/90"
+            >
+              {savingProfile ? (
+                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+              ) : null}
+              Salvar
             </Button>
           </DialogFooter>
         </DialogContent>
