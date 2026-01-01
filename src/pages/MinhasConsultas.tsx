@@ -72,6 +72,16 @@ const statusConfig: Record<string, { label: string; className: string }> = {
   },
 };
 
+type StatusFilter = 'all' | 'confirmed' | 'cancelled' | 'completed' | 'pending';
+
+const filterOptions: { value: StatusFilter; label: string }[] = [
+  { value: 'all', label: 'Todos' },
+  { value: 'confirmed', label: 'Confirmados' },
+  { value: 'pending', label: 'Aguardando' },
+  { value: 'cancelled', label: 'Cancelados' },
+  { value: 'completed', label: 'Concluídos' },
+];
+
 export default function MinhasConsultas() {
   const { user, profile } = useAuth();
   const [email, setEmail] = useState('');
@@ -80,9 +90,7 @@ export default function MinhasConsultas() {
   const [services, setServices] = useState<Service[]>([]);
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
-  const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
-  const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null);
-  const [processing, setProcessing] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
 
   // Auto-fetch for logged-in users
   useEffect(() => {
@@ -150,8 +158,13 @@ export default function MinhasConsultas() {
     return mins > 0 ? `${hours}h ${mins}min` : `${hours}h`;
   };
 
-  // Sort all appointments by date descending
-  const sortedAppointments = [...appointments].sort((a, b) => {
+  // Filter and sort appointments
+  const filteredAppointments = appointments.filter((apt) => {
+    if (statusFilter === 'all') return true;
+    return apt.status === statusFilter;
+  });
+
+  const sortedAppointments = [...filteredAppointments].sort((a, b) => {
     const dateA = new Date(`${a.appointment_date}T${a.appointment_time}`);
     const dateB = new Date(`${b.appointment_date}T${b.appointment_time}`);
     return dateB.getTime() - dateA.getTime();
@@ -286,8 +299,37 @@ export default function MinhasConsultas() {
                     </p>
                   </div>
                 ) : (
-                  <div className="space-y-4">
-                    {sortedAppointments.map((apt) => renderAppointmentCard(apt))}
+                  <div className="space-y-6">
+                    {/* Status Filters */}
+                    <div className="flex flex-wrap gap-2">
+                      {filterOptions.map((option) => (
+                        <Button
+                          key={option.value}
+                          variant={statusFilter === option.value ? 'default' : 'outline'}
+                          size="sm"
+                          onClick={() => setStatusFilter(option.value)}
+                          className={statusFilter === option.value 
+                            ? 'bg-clinic-primary text-primary-foreground hover:bg-clinic-primary/90' 
+                            : 'bg-background text-foreground hover:bg-muted border-border'
+                          }
+                        >
+                          {option.label}
+                        </Button>
+                      ))}
+                    </div>
+
+                    {/* Appointments List */}
+                    {sortedAppointments.length === 0 ? (
+                      <div className="bg-background rounded-xl p-8 border border-clinic-border-subtle text-center">
+                        <p className="text-clinic-text-secondary">
+                          Nenhum agendamento com este status
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="space-y-4">
+                        {sortedAppointments.map((apt) => renderAppointmentCard(apt))}
+                      </div>
+                    )}
                   </div>
                 )}
               </>
