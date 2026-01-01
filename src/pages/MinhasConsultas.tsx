@@ -39,11 +39,13 @@ import {
   Eye,
   CreditCard,
   FileText,
+  Download,
 } from 'lucide-react';
 import { format, addDays, isBefore, startOfDay } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import jsPDF from 'jspdf';
 
 interface Service {
   id: string;
@@ -348,6 +350,123 @@ export default function MinhasConsultas() {
     paid: { label: 'Pago', className: 'bg-success/20 text-success border-success/30' },
     failed: { label: 'Falhou', className: 'bg-destructive/20 text-destructive border-destructive/30' },
     refunded: { label: 'Reembolsado', className: 'bg-muted text-muted-foreground border-border' },
+  };
+
+  const handleDownloadPDF = (apt: Appointment) => {
+    const service = getService(apt.service_id);
+    const professional = getProfessional(apt.professional_uuid);
+    const status = statusConfig[apt.status] || statusConfig.pending;
+    const paymentStatus = paymentStatusConfig[apt.payment_status] || paymentStatusConfig.pending;
+
+    const doc = new jsPDF();
+    const pageWidth = doc.internal.pageSize.getWidth();
+
+    // Header
+    doc.setFontSize(20);
+    doc.setFont('helvetica', 'bold');
+    doc.text('COMPROVANTE DE AGENDAMENTO', pageWidth / 2, 25, { align: 'center' });
+
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(100);
+    doc.text(`Gerado em: ${format(new Date(), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}`, pageWidth / 2, 33, { align: 'center' });
+
+    // Divider line
+    doc.setDrawColor(200);
+    doc.line(20, 40, pageWidth - 20, 40);
+
+    // Reset text color
+    doc.setTextColor(0);
+    let yPos = 55;
+
+    // Service Section
+    doc.setFontSize(12);
+    doc.setFont('helvetica', 'bold');
+    doc.text('SERVIÇO', 20, yPos);
+    yPos += 8;
+
+    doc.setFontSize(11);
+    doc.setFont('helvetica', 'normal');
+    doc.text(`Nome: ${service?.name || 'Consulta'}`, 25, yPos);
+    yPos += 7;
+    doc.text(`Duração: ${service ? formatDuration(service.duration_minutes) : '30 minutos'}`, 25, yPos);
+    yPos += 7;
+    doc.text(`Valor: R$ ${(apt.amount_cents / 100).toFixed(2).replace('.', ',')}`, 25, yPos);
+    yPos += 15;
+
+    // Date & Time Section
+    doc.setFontSize(12);
+    doc.setFont('helvetica', 'bold');
+    doc.text('DATA E HORÁRIO', 20, yPos);
+    yPos += 8;
+
+    doc.setFontSize(11);
+    doc.setFont('helvetica', 'normal');
+    doc.text(`Data: ${format(new Date(apt.appointment_date), "dd 'de' MMMM 'de' yyyy", { locale: ptBR })}`, 25, yPos);
+    yPos += 7;
+    doc.text(`Horário: ${apt.appointment_time}`, 25, yPos);
+    yPos += 15;
+
+    // Professional Section
+    doc.setFontSize(12);
+    doc.setFont('helvetica', 'bold');
+    doc.text('PROFISSIONAL', 20, yPos);
+    yPos += 8;
+
+    doc.setFontSize(11);
+    doc.setFont('helvetica', 'normal');
+    doc.text(`Nome: ${professional?.name || 'Profissional não definido'}`, 25, yPos);
+    yPos += 7;
+    if (professional?.phone) {
+      doc.text(`Telefone: ${professional.phone}`, 25, yPos);
+      yPos += 7;
+    }
+    yPos += 8;
+
+    // Patient Section
+    doc.setFontSize(12);
+    doc.setFont('helvetica', 'bold');
+    doc.text('DADOS DO PACIENTE', 20, yPos);
+    yPos += 8;
+
+    doc.setFontSize(11);
+    doc.setFont('helvetica', 'normal');
+    doc.text(`Nome: ${apt.patient_name}`, 25, yPos);
+    yPos += 7;
+    doc.text(`Email: ${apt.patient_email}`, 25, yPos);
+    yPos += 7;
+    doc.text(`Telefone: ${apt.patient_phone}`, 25, yPos);
+    yPos += 15;
+
+    // Status Section
+    doc.setFontSize(12);
+    doc.setFont('helvetica', 'bold');
+    doc.text('STATUS', 20, yPos);
+    yPos += 8;
+
+    doc.setFontSize(11);
+    doc.setFont('helvetica', 'normal');
+    doc.text(`Consulta: ${status.label}`, 25, yPos);
+    yPos += 7;
+    doc.text(`Pagamento: ${paymentStatus.label}`, 25, yPos);
+    yPos += 20;
+
+    // Footer divider
+    doc.setDrawColor(200);
+    doc.line(20, yPos, pageWidth - 20, yPos);
+    yPos += 10;
+
+    // Footer
+    doc.setFontSize(9);
+    doc.setTextColor(100);
+    doc.text('Este é um comprovante de agendamento gerado automaticamente.', pageWidth / 2, yPos, { align: 'center' });
+    yPos += 5;
+    doc.text(`ID do Agendamento: ${apt.id}`, pageWidth / 2, yPos, { align: 'center' });
+
+    // Save PDF
+    const fileName = `comprovante-${format(new Date(apt.appointment_date), 'dd-MM-yyyy')}-${apt.appointment_time.replace(':', 'h')}.pdf`;
+    doc.save(fileName);
+    toast.success('Comprovante baixado com sucesso!');
   };
 
   const handleConfirmCancel = async () => {
@@ -846,10 +965,19 @@ export default function MinhasConsultas() {
             );
           })()}
 
-          <DialogFooter>
+          <DialogFooter className="flex-col sm:flex-row gap-2">
+            <Button
+              variant="outline"
+              onClick={() => selectedAppointment && handleDownloadPDF(selectedAppointment)}
+              className="w-full sm:w-auto"
+            >
+              <Download className="h-4 w-4 mr-2" />
+              Baixar PDF
+            </Button>
             <Button
               variant="outline"
               onClick={() => setDetailsDialogOpen(false)}
+              className="w-full sm:w-auto"
             >
               Fechar
             </Button>
