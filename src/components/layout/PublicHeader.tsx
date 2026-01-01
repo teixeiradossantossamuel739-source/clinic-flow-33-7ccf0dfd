@@ -132,12 +132,20 @@ export function PublicHeader() {
                     </div>
                     <DropdownMenuSeparator />
                     {role === 'cliente' && (
-                      <DropdownMenuItem asChild>
-                        <Link to="/minhas-consultas" className="flex items-center gap-2">
-                          <CalendarDays className="h-4 w-4" />
-                          Minhas Consultas
-                        </Link>
-                      </DropdownMenuItem>
+                      <>
+                        <DropdownMenuItem asChild>
+                          <Link to="/meu-perfil" className="flex items-center gap-2">
+                            <User className="h-4 w-4" />
+                            Meu Perfil
+                          </Link>
+                        </DropdownMenuItem>
+                        <DropdownMenuItem asChild>
+                          <Link to="/minhas-consultas" className="flex items-center gap-2">
+                            <CalendarDays className="h-4 w-4" />
+                            Minhas Consultas
+                          </Link>
+                        </DropdownMenuItem>
+                      </>
                     )}
                     {(isAdmin || isFuncionario) && (
                       <DropdownMenuItem asChild>
@@ -199,14 +207,24 @@ export function PublicHeader() {
                 </Link>
               ))}
               {user && isCliente && (
-                <Link
-                  to="/minhas-consultas"
-                  onClick={() => setMobileMenuOpen(false)}
-                  className="px-4 py-3 rounded-lg text-sm font-medium text-clinic-text-secondary hover:bg-clinic-surface flex items-center gap-2"
-                >
-                  <CalendarDays className="h-4 w-4" />
-                  Minhas Consultas
-                </Link>
+                <>
+                  <Link
+                    to="/meu-perfil"
+                    onClick={() => setMobileMenuOpen(false)}
+                    className="px-4 py-3 rounded-lg text-sm font-medium text-clinic-text-secondary hover:bg-clinic-surface flex items-center gap-2"
+                  >
+                    <User className="h-4 w-4" />
+                    Meu Perfil
+                  </Link>
+                  <Link
+                    to="/minhas-consultas"
+                    onClick={() => setMobileMenuOpen(false)}
+                    className="px-4 py-3 rounded-lg text-sm font-medium text-clinic-text-secondary hover:bg-clinic-surface flex items-center gap-2"
+                  >
+                    <CalendarDays className="h-4 w-4" />
+                    Minhas Consultas
+                  </Link>
+                </>
               )}
               {(isAdmin || isFuncionario) && (
                 <Link

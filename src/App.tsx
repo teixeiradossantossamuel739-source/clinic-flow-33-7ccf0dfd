@@ -30,6 +30,7 @@ import FuncionarioPerfil from "./pages/funcionario/FuncionarioPerfil";
 import FuncionarioPacientes from "./pages/funcionario/FuncionarioPacientes";
 import FuncionarioConfiguracoes from "./pages/funcionario/FuncionarioConfiguracoes";
 import ConfirmAppointment from "./pages/ConfirmAppointment";
+import MeuPerfil from "./pages/MeuPerfil";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -53,6 +54,7 @@ const App = () => (
             <Route path="/agendamento-sucesso" element={<BookingSuccessPage />} />
             <Route path="/confirmar-presenca" element={<ConfirmAppointment />} />
             <Route path="/minhas-consultas" element={<MinhasConsultas />} />
+            <Route path="/meu-perfil" element={<MeuPerfil />} />
             
             {/* Admin Routes - Admin only */}
             <Route
