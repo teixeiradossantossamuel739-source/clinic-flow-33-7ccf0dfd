@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
+import { Calendar as CalendarComponent } from '@/components/ui/calendar';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -15,6 +16,14 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import {
@@ -26,10 +35,12 @@ import {
   Mail,
   Phone,
   X,
+  RefreshCw,
 } from 'lucide-react';
-import { format } from 'date-fns';
+import { format, addDays, isBefore, startOfDay } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { toast } from 'sonner';
+import { cn } from '@/lib/utils';
 
 interface Service {
   id: string;
@@ -107,6 +118,14 @@ export default function MinhasConsultas() {
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
   const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null);
   const [cancelling, setCancelling] = useState(false);
+  
+  // Reschedule state
+  const [rescheduleDialogOpen, setRescheduleDialogOpen] = useState(false);
+  const [rescheduleDate, setRescheduleDate] = useState<Date | undefined>(undefined);
+  const [rescheduleTime, setRescheduleTime] = useState<string | null>(null);
+  const [availableSlots, setAvailableSlots] = useState<string[]>([]);
+  const [loadingSlots, setLoadingSlots] = useState(false);
+  const [rescheduling, setRescheduling] = useState(false);
 
   // Auto-fetch for logged-in users
   useEffect(() => {
@@ -174,8 +193,132 @@ export default function MinhasConsultas() {
     return mins > 0 ? `${hours}h ${mins}min` : `${hours}h`;
   };
 
-  const canCancelAppointment = (status: string) => {
+  const canModifyAppointment = (status: string) => {
     return ['pending', 'confirmed', 'awaiting_confirmation'].includes(status);
+  };
+
+  const handleRescheduleClick = (apt: Appointment) => {
+    setSelectedAppointment(apt);
+    setRescheduleDate(undefined);
+    setRescheduleTime(null);
+    setAvailableSlots([]);
+    setRescheduleDialogOpen(true);
+  };
+
+  const fetchAvailableSlots = async (date: Date, professionalId: string) => {
+    setLoadingSlots(true);
+    setAvailableSlots([]);
+    setRescheduleTime(null);
+
+    const dayOfWeek = date.getDay();
+    const dateStr = format(date, 'yyyy-MM-dd');
+
+    // Fetch professional schedule for this day
+    const { data: schedules } = await supabase
+      .from('professional_schedules')
+      .select('*')
+      .eq('professional_id', professionalId)
+      .eq('day_of_week', dayOfWeek)
+      .eq('is_active', true);
+
+    if (!schedules || schedules.length === 0) {
+      setLoadingSlots(false);
+      return;
+    }
+
+    // Fetch existing appointments for this date
+    const { data: existingAppts } = await supabase
+      .from('appointments')
+      .select('appointment_time')
+      .eq('professional_uuid', professionalId)
+      .eq('appointment_date', dateStr)
+      .in('status', ['pending', 'confirmed', 'awaiting_confirmation']);
+
+    const bookedTimes = new Set((existingAppts || []).map((a) => a.appointment_time));
+
+    // Fetch blocked times
+    const { data: blockedTimes } = await supabase
+      .from('professional_blocked_times')
+      .select('*')
+      .eq('professional_id', professionalId)
+      .eq('block_date', dateStr);
+
+    // Generate available slots
+    const slots: string[] = [];
+    for (const schedule of schedules) {
+      const [startH, startM] = schedule.start_time.split(':').map(Number);
+      const [endH, endM] = schedule.end_time.split(':').map(Number);
+      const slotDuration = schedule.slot_duration_minutes || 30;
+
+      let currentMinutes = startH * 60 + startM;
+      const endMinutes = endH * 60 + endM;
+
+      while (currentMinutes + slotDuration <= endMinutes) {
+        const h = Math.floor(currentMinutes / 60);
+        const m = currentMinutes % 60;
+        const timeStr = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
+
+        // Check if not booked
+        if (!bookedTimes.has(timeStr) && !bookedTimes.has(`${timeStr}:00`)) {
+          // Check if not blocked
+          const isBlocked = (blockedTimes || []).some((block) => {
+            if (!block.start_time || !block.end_time) return true; // Full day block
+            const blockStart = block.start_time.substring(0, 5);
+            const blockEnd = block.end_time.substring(0, 5);
+            return timeStr >= blockStart && timeStr < blockEnd;
+          });
+
+          if (!isBlocked) {
+            slots.push(timeStr);
+          }
+        }
+
+        currentMinutes += slotDuration;
+      }
+    }
+
+    setAvailableSlots(slots);
+    setLoadingSlots(false);
+  };
+
+  const handleDateSelect = (date: Date | undefined) => {
+    setRescheduleDate(date);
+    setRescheduleTime(null);
+    if (date && selectedAppointment?.professional_uuid) {
+      fetchAvailableSlots(date, selectedAppointment.professional_uuid);
+    }
+  };
+
+  const handleConfirmReschedule = async () => {
+    if (!selectedAppointment || !rescheduleDate || !rescheduleTime) return;
+
+    setRescheduling(true);
+    const { error } = await supabase
+      .from('appointments')
+      .update({
+        appointment_date: format(rescheduleDate, 'yyyy-MM-dd'),
+        appointment_time: rescheduleTime,
+        status: 'pending',
+      })
+      .eq('id', selectedAppointment.id);
+
+    if (error) {
+      console.error('Error rescheduling appointment:', error);
+      toast.error('Erro ao reagendar consulta');
+    } else {
+      toast.success('Consulta reagendada com sucesso');
+      setAppointments((prev) =>
+        prev.map((apt) =>
+          apt.id === selectedAppointment.id
+            ? { ...apt, appointment_date: format(rescheduleDate, 'yyyy-MM-dd'), appointment_time: rescheduleTime, status: 'pending' }
+            : apt
+        )
+      );
+    }
+
+    setRescheduling(false);
+    setRescheduleDialogOpen(false);
+    setSelectedAppointment(null);
   };
 
   const handleCancelClick = (apt: Appointment) => {
@@ -225,7 +368,7 @@ export default function MinhasConsultas() {
   const renderAppointmentCard = (apt: Appointment) => {
     const status = statusConfig[apt.status] || statusConfig.pending;
     const service = getService(apt.service_id);
-    const showCancelButton = canCancelAppointment(apt.status);
+    const showActions = canModifyAppointment(apt.status);
 
     return (
       <div
@@ -262,17 +405,28 @@ export default function MinhasConsultas() {
               <span>{getProfessionalName(apt.professional_uuid)}</span>
             </div>
 
-            {/* Cancel Button */}
-            {showCancelButton && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => handleCancelClick(apt)}
-                className="w-fit mt-2 text-destructive hover:text-destructive hover:bg-destructive/10"
-              >
-                <X className="h-4 w-4 mr-1" />
-                Cancelar
-              </Button>
+            {/* Action Buttons */}
+            {showActions && (
+              <div className="flex flex-wrap gap-2 mt-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => handleRescheduleClick(apt)}
+                  className="w-fit text-clinic-primary hover:text-clinic-primary hover:bg-clinic-primary/10"
+                >
+                  <RefreshCw className="h-4 w-4 mr-1" />
+                  Reagendar
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => handleCancelClick(apt)}
+                  className="w-fit text-destructive hover:text-destructive hover:bg-destructive/10"
+                >
+                  <X className="h-4 w-4 mr-1" />
+                  Cancelar
+                </Button>
+              </div>
             )}
           </div>
 
@@ -462,6 +616,89 @@ export default function MinhasConsultas() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Reschedule Dialog */}
+      <Dialog open={rescheduleDialogOpen} onOpenChange={setRescheduleDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Reagendar consulta</DialogTitle>
+            <DialogDescription>
+              Selecione uma nova data e horário para sua consulta.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            {/* Date Picker */}
+            <div>
+              <Label className="mb-2 block">Data</Label>
+              <div className="flex justify-center">
+                <CalendarComponent
+                  mode="single"
+                  selected={rescheduleDate}
+                  onSelect={handleDateSelect}
+                  disabled={(date) => isBefore(date, startOfDay(new Date()))}
+                  locale={ptBR}
+                  className={cn("rounded-md border pointer-events-auto")}
+                />
+              </div>
+            </div>
+
+            {/* Time Slots */}
+            {rescheduleDate && (
+              <div>
+                <Label className="mb-2 block">Horário</Label>
+                {loadingSlots ? (
+                  <div className="flex items-center justify-center py-4">
+                    <Loader2 className="h-5 w-5 animate-spin text-clinic-primary" />
+                  </div>
+                ) : availableSlots.length === 0 ? (
+                  <p className="text-sm text-clinic-text-muted text-center py-4">
+                    Nenhum horário disponível nesta data
+                  </p>
+                ) : (
+                  <div className="grid grid-cols-4 gap-2 max-h-40 overflow-y-auto">
+                    {availableSlots.map((slot) => (
+                      <Button
+                        key={slot}
+                        variant={rescheduleTime === slot ? 'default' : 'outline'}
+                        size="sm"
+                        onClick={() => setRescheduleTime(slot)}
+                        className={cn(
+                          rescheduleTime === slot
+                            ? 'bg-clinic-primary text-primary-foreground'
+                            : 'bg-background text-foreground hover:bg-muted border-border'
+                        )}
+                      >
+                        {slot}
+                      </Button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setRescheduleDialogOpen(false)}
+              disabled={rescheduling}
+            >
+              Cancelar
+            </Button>
+            <Button
+              onClick={handleConfirmReschedule}
+              disabled={!rescheduleDate || !rescheduleTime || rescheduling}
+              className="bg-clinic-primary text-primary-foreground hover:bg-clinic-primary/90"
+            >
+              {rescheduling ? (
+                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+              ) : null}
+              Confirmar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </PublicLayout>
   );
 }
