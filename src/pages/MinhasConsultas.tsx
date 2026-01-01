@@ -308,6 +308,9 @@ export default function MinhasConsultas() {
   const handleConfirmReschedule = async () => {
     if (!selectedAppointment || !rescheduleDate || !rescheduleTime) return;
 
+    const oldDate = selectedAppointment.appointment_date;
+    const oldTime = selectedAppointment.appointment_time;
+
     setRescheduling(true);
     const { error } = await supabase
       .from('appointments')
@@ -330,6 +333,34 @@ export default function MinhasConsultas() {
             : apt
         )
       );
+
+      // Send WhatsApp notification to professional
+      const professional = getProfessional(selectedAppointment.professional_uuid);
+      const service = getService(selectedAppointment.service_id);
+      if (professional?.phone) {
+        try {
+          const { data } = await supabase.functions.invoke('whatsapp-notify', {
+            body: {
+              professionalPhone: professional.phone,
+              patientName: selectedAppointment.patient_name,
+              patientPhone: selectedAppointment.patient_phone,
+              appointmentDate: oldDate,
+              appointmentTime: oldTime,
+              newAppointmentDate: format(rescheduleDate, 'yyyy-MM-dd'),
+              newAppointmentTime: rescheduleTime,
+              serviceName: service?.name,
+              appointmentId: selectedAppointment.id,
+              type: 'rescheduled_by_patient',
+            },
+          });
+
+          if (data?.whatsappLink) {
+            window.open(data.whatsappLink, '_blank');
+          }
+        } catch (err) {
+          console.error('Error sending WhatsApp notification:', err);
+        }
+      }
     }
 
     setRescheduling(false);
@@ -527,6 +558,32 @@ export default function MinhasConsultas() {
           apt.id === selectedAppointment.id ? { ...apt, status: 'cancelled' } : apt
         )
       );
+
+      // Send WhatsApp notification to professional
+      const professional = getProfessional(selectedAppointment.professional_uuid);
+      const service = getService(selectedAppointment.service_id);
+      if (professional?.phone) {
+        try {
+          const { data } = await supabase.functions.invoke('whatsapp-notify', {
+            body: {
+              professionalPhone: professional.phone,
+              patientName: selectedAppointment.patient_name,
+              patientPhone: selectedAppointment.patient_phone,
+              appointmentDate: selectedAppointment.appointment_date,
+              appointmentTime: selectedAppointment.appointment_time,
+              serviceName: service?.name,
+              appointmentId: selectedAppointment.id,
+              type: 'cancelled_by_patient',
+            },
+          });
+
+          if (data?.whatsappLink) {
+            window.open(data.whatsappLink, '_blank');
+          }
+        } catch (err) {
+          console.error('Error sending WhatsApp notification:', err);
+        }
+      }
     }
 
     setCancelling(false);
