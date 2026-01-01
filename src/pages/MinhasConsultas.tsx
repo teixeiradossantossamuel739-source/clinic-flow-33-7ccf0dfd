@@ -13,6 +13,8 @@ import {
   Search,
   Loader2,
   User,
+  Mail,
+  Phone,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -236,6 +238,40 @@ export default function MinhasConsultas() {
             <p className="text-clinic-text-secondary mb-6">
               Aqui você pode ver e gerenciar seus agendamentos
             </p>
+
+            {/* Client Profile Card */}
+            {user && profile && (
+              <div className="bg-background rounded-xl p-5 border border-clinic-border-subtle mb-6">
+                <div className="flex flex-col gap-3">
+                  {/* Nome */}
+                  <div className="flex items-center gap-3">
+                    <div className="h-10 w-10 rounded-full bg-clinic-primary/10 flex items-center justify-center">
+                      <User className="h-5 w-5 text-clinic-primary" />
+                    </div>
+                    <div>
+                      <p className="font-bold text-foreground">
+                        {profile.full_name || 'Cliente'}
+                      </p>
+                      <p className="text-xs text-clinic-text-muted">Cliente</p>
+                    </div>
+                  </div>
+                  
+                  {/* Email */}
+                  <div className="flex items-center gap-2 text-sm text-clinic-text-secondary">
+                    <Mail className="h-4 w-4" />
+                    <span>{profile.email}</span>
+                  </div>
+                  
+                  {/* WhatsApp */}
+                  {profile.whatsapp && (
+                    <div className="flex items-center gap-2 text-sm text-clinic-text-secondary">
+                      <Phone className="h-4 w-4" />
+                      <span>{profile.whatsapp}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
 
             {/* Novo Agendamento Button */}
             <Link to="/agendar">
