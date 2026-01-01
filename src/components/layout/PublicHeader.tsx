@@ -1,7 +1,7 @@
 import { Link, useLocation } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
-import { Menu, X, Phone, MapPin, Clock, LogIn, LogOut, User } from 'lucide-react';
+import { Menu, X, Phone, MapPin, Clock, LogIn, LogOut, User, CalendarDays } from 'lucide-react';
 import { useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import {
@@ -87,12 +87,13 @@ export function PublicHeader() {
                 <Link
                   to="/minhas-consultas"
                   className={cn(
-                    'px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200',
+                    'px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 flex items-center gap-2',
                     location.pathname === '/minhas-consultas'
                       ? 'bg-clinic-primary/10 text-clinic-primary'
                       : 'text-clinic-text-secondary hover:text-foreground hover:bg-clinic-surface'
                   )}
                 >
+                  <CalendarDays className="h-4 w-4" />
                   Minhas Consultas
                 </Link>
               )}
@@ -132,7 +133,10 @@ export function PublicHeader() {
                     <DropdownMenuSeparator />
                     {role === 'cliente' && (
                       <DropdownMenuItem asChild>
-                        <Link to="/minhas-consultas">Minhas Consultas</Link>
+                        <Link to="/minhas-consultas" className="flex items-center gap-2">
+                          <CalendarDays className="h-4 w-4" />
+                          Minhas Consultas
+                        </Link>
                       </DropdownMenuItem>
                     )}
                     {(isAdmin || isFuncionario) && (
@@ -198,8 +202,9 @@ export function PublicHeader() {
                 <Link
                   to="/minhas-consultas"
                   onClick={() => setMobileMenuOpen(false)}
-                  className="px-4 py-3 rounded-lg text-sm font-medium text-clinic-text-secondary hover:bg-clinic-surface"
+                  className="px-4 py-3 rounded-lg text-sm font-medium text-clinic-text-secondary hover:bg-clinic-surface flex items-center gap-2"
                 >
+                  <CalendarDays className="h-4 w-4" />
                   Minhas Consultas
                 </Link>
               )}
