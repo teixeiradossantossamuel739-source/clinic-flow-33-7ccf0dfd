@@ -241,11 +241,11 @@ export default function HomePage() {
                     <ArrowRight className="h-5 w-5 transition-transform group-hover:translate-x-1" />
                   </Button>
                 </Link>
-                <Link to="/especialidades">
-                  <Button variant="hero-outline" size="xl" className="w-full sm:w-auto">
-                    Ver Especialidades
-                  </Button>
-                </Link>
+            <Link to="/minhas-consultas">
+              <Button variant="hero-outline" size="xl" className="w-full sm:w-auto">
+                Minhas Agendas
+              </Button>
+            </Link>
               </div>
 
               {/* Stats */}
