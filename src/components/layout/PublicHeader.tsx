@@ -22,7 +22,7 @@ const navItems = [
 export function PublicHeader() {
   const location = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const { user, profile, role, signOut, isAdmin, isFuncionario } = useAuth();
+  const { user, profile, role, signOut, isAdmin, isFuncionario, isCliente } = useAuth();
 
   const handleSignOut = async () => {
     await signOut();
@@ -83,7 +83,7 @@ export function PublicHeader() {
                   {item.name}
                 </Link>
               ))}
-              {user && (
+              {user && isCliente && (
                 <Link
                   to="/minhas-consultas"
                   className={cn(
@@ -198,7 +198,7 @@ export function PublicHeader() {
                   {item.name}
                 </Link>
               ))}
-              {user && (
+              {user && isCliente && (
                 <Link
                   to="/minhas-consultas"
                   onClick={() => setMobileMenuOpen(false)}
