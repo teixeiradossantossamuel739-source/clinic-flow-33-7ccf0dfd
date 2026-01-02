@@ -58,7 +58,7 @@ export function AdminLayout({ children }: AdminLayoutProps) {
       <aside className="hidden lg:flex lg:flex-col lg:w-64 bg-background border-r border-clinic-border-subtle">
         {/* Logo */}
         <div className="h-16 flex items-center px-6 border-b border-clinic-border-subtle">
-          <Link to="/" className="flex items-center gap-2">
+          <Link to="/home" className="flex items-center gap-2">
             <div className="h-9 w-9 rounded-xl bg-clinic-primary flex items-center justify-center">
               <span className="text-base font-bold text-foreground">C</span>
             </div>
@@ -94,7 +94,7 @@ export function AdminLayout({ children }: AdminLayoutProps) {
         {/* Footer */}
         <div className="p-4 border-t border-clinic-border-subtle">
           <button
-            onClick={() => navigate('/')}
+            onClick={() => navigate('/home')}
             className="flex items-center gap-3 w-full px-4 py-3 rounded-xl text-sm font-medium text-clinic-text-secondary hover:bg-clinic-surface hover:text-foreground transition-all"
           >
             <LogOut className="h-5 w-5" />
@@ -113,7 +113,7 @@ export function AdminLayout({ children }: AdminLayoutProps) {
           <aside className="absolute left-0 top-0 bottom-0 w-72 bg-background animate-slide-in-left">
             {/* Logo */}
             <div className="h-16 flex items-center justify-between px-6 border-b border-clinic-border-subtle">
-              <Link to="/" className="flex items-center gap-2">
+              <Link to="/home" className="flex items-center gap-2">
                 <div className="h-9 w-9 rounded-xl bg-clinic-primary flex items-center justify-center">
                   <span className="text-base font-bold text-foreground">C</span>
                 </div>

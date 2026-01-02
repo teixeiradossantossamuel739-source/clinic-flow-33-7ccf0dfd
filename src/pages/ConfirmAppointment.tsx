@@ -159,7 +159,7 @@ export default function ConfirmAppointment() {
               </div>
               <h2 className="text-xl font-semibold">Erro</h2>
               <p className="text-muted-foreground">{error}</p>
-              <Button onClick={() => navigate('/')} variant="outline">
+              <Button onClick={() => navigate('/home')} variant="outline">
                 Voltar ao Início
               </Button>
             </div>

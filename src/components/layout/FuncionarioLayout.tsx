@@ -142,7 +142,7 @@ export function FuncionarioLayout({ children }: FuncionarioLayoutProps) {
 
   const handleSignOut = async () => {
     await signOut();
-    navigate('/');
+    navigate('/home');
   };
 
   const getInitials = (name: string | null | undefined) => {
