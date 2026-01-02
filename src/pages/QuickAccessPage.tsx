@@ -7,6 +7,7 @@ import { Label } from '@/components/ui/label';
 import { useAuth } from '@/contexts/AuthContext';
 import { Loader2, Mail, User, ArrowRight, Phone, Sparkles, Shield } from 'lucide-react';
 import { toast } from 'sonner';
+import { hasCompletedOnboarding } from './OnboardingPage';
 
 const VISITOR_DATA_KEY = 'clinic_visitor_data';
 
@@ -153,9 +154,16 @@ export default function QuickAccessPage() {
         toast.success('Bem-vindo!');
       }
 
-      // Redirect to intended destination
-      const redirectTo = (location.state as { from?: string })?.from || '/home';
-      navigate(redirectTo, { replace: true });
+      // Check if first time (needs onboarding) or has destination
+      const intendedDestination = (location.state as { from?: string })?.from;
+      
+      if (!hasCompletedOnboarding() && !intendedDestination) {
+        // First time user - show onboarding
+        navigate('/onboarding', { replace: true });
+      } else {
+        // Returning user or has specific destination
+        navigate(intendedDestination || '/home', { replace: true });
+      }
     } catch (err) {
       // Save as visitor anyway
       setVisitorData({
@@ -164,8 +172,13 @@ export default function QuickAccessPage() {
         whatsapp: formData.whatsapp,
         createdAt: new Date().toISOString(),
       });
-      const redirectTo = (location.state as { from?: string })?.from || '/home';
-      navigate(redirectTo, { replace: true });
+      
+      if (!hasCompletedOnboarding()) {
+        navigate('/onboarding', { replace: true });
+      } else {
+        const redirectTo = (location.state as { from?: string })?.from || '/home';
+        navigate(redirectTo, { replace: true });
+      }
     } finally {
       setLoading(false);
     }

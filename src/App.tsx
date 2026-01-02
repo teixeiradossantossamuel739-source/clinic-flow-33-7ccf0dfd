@@ -8,6 +8,7 @@ import { AuthProvider } from "@/contexts/AuthContext";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { VisitorGuard } from "@/components/auth/VisitorGuard";
 import QuickAccessPage from "./pages/QuickAccessPage";
+import OnboardingPage from "./pages/OnboardingPage";
 import HomePage from "./pages/HomePage";
 import SpecialtiesPage from "./pages/SpecialtiesPage";
 import ProfessionalsPage from "./pages/ProfessionalsPage";
@@ -53,6 +54,7 @@ const App = () => (
             <Route path="/auth" element={<AuthPage />} />
             <Route path="/setup" element={<SetupPage />} />
             <Route path="/confirmar-presenca" element={<ConfirmAppointment />} />
+            <Route path="/onboarding" element={<OnboardingPage />} />
             
             {/* Public Routes - Protected by VisitorGuard */}
             <Route path="/home" element={<VisitorGuard><HomePage /></VisitorGuard>} />
