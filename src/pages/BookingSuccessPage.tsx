@@ -115,7 +115,7 @@ export default function BookingSuccessPage() {
               Seu pagamento está sendo processado. Isso pode levar alguns segundos.
             </p>
             <Button asChild variant="outline">
-              <Link to="/">
+              <Link to="/home">
                 <Home className="h-4 w-4 mr-2" />
                 Voltar ao Início
               </Link>
@@ -240,7 +240,7 @@ export default function BookingSuccessPage() {
             {/* Actions */}
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
               <Button asChild variant="outline" size="lg">
-                <Link to="/">
+                <Link to="/home">
                   <Home className="h-4 w-4" />
                   Voltar ao Início
                 </Link>

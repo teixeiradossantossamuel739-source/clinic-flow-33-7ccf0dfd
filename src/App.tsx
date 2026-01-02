@@ -6,6 +6,8 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
+import { VisitorGuard } from "@/components/auth/VisitorGuard";
+import QuickAccessPage from "./pages/QuickAccessPage";
 import HomePage from "./pages/HomePage";
 import SpecialtiesPage from "./pages/SpecialtiesPage";
 import ProfessionalsPage from "./pages/ProfessionalsPage";
@@ -44,17 +46,22 @@ const App = () => (
           <Toaster />
           <Sonner />
           <Routes>
-            {/* Public Routes */}
-            <Route path="/" element={<HomePage />} />
+            {/* Quick Access Gate - Initial screen for visitors */}
+            <Route path="/" element={<QuickAccessPage />} />
+            
+            {/* Auth Routes */}
             <Route path="/auth" element={<AuthPage />} />
             <Route path="/setup" element={<SetupPage />} />
-            <Route path="/especialidades" element={<SpecialtiesPage />} />
-            <Route path="/profissionais" element={<ProfessionalsPage />} />
-            <Route path="/agendar" element={<BookingPage />} />
-            <Route path="/agendamento-sucesso" element={<BookingSuccessPage />} />
             <Route path="/confirmar-presenca" element={<ConfirmAppointment />} />
-            <Route path="/minhas-consultas" element={<MinhasConsultas />} />
-            <Route path="/meu-perfil" element={<MeuPerfil />} />
+            
+            {/* Public Routes - Protected by VisitorGuard */}
+            <Route path="/home" element={<VisitorGuard><HomePage /></VisitorGuard>} />
+            <Route path="/especialidades" element={<VisitorGuard><SpecialtiesPage /></VisitorGuard>} />
+            <Route path="/profissionais" element={<VisitorGuard><ProfessionalsPage /></VisitorGuard>} />
+            <Route path="/agendar" element={<VisitorGuard><BookingPage /></VisitorGuard>} />
+            <Route path="/agendamento-sucesso" element={<VisitorGuard><BookingSuccessPage /></VisitorGuard>} />
+            <Route path="/minhas-consultas" element={<VisitorGuard><MinhasConsultas /></VisitorGuard>} />
+            <Route path="/meu-perfil" element={<VisitorGuard><MeuPerfil /></VisitorGuard>} />
             
             {/* Admin Routes - Admin only */}
             <Route

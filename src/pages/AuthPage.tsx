@@ -67,7 +67,7 @@ export default function AuthPage() {
         } else if (role === 'funcionario') {
           navigate('/funcionario');
         } else {
-          navigate('/');
+          navigate('/home');
         }
       };
       checkRoleAndRedirect();
@@ -109,7 +109,7 @@ export default function AuthPage() {
         }
       } else {
         toast.success('Bem-vindo!');
-        navigate('/');
+        navigate('/home');
       }
     } catch (err) {
       toast.error('Erro inesperado. Tente novamente.');
@@ -146,7 +146,7 @@ export default function AuthPage() {
         }
       } else {
         toast.success('Login realizado com sucesso!');
-        navigate('/');
+        navigate('/home');
       }
     } catch (err) {
       toast.error('Erro inesperado. Tente novamente.');
@@ -442,7 +442,7 @@ export default function AuthPage() {
         {/* Back to home */}
         <div className="mt-4 text-center">
           <a
-            href="/"
+            href="/home"
             className="text-sm text-clinic-text-muted hover:text-foreground transition-colors"
           >
             ← Voltar para o início

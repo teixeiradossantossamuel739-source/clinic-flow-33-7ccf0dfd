@@ -13,7 +13,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 
 const navItems = [
-  { name: 'Início', href: '/' },
+  { name: 'Início', href: '/home' },
   { name: 'Especialidades', href: '/especialidades' },
   { name: 'Profissionais', href: '/profissionais' },
   { name: 'Agendamento', href: '/agendar' },
@@ -57,7 +57,7 @@ export function PublicHeader() {
         <div className="container">
           <div className="flex h-16 items-center justify-between">
             {/* Logo */}
-            <Link to="/" className="flex items-center gap-2">
+            <Link to="/home" className="flex items-center gap-2">
               <div className="h-10 w-10 rounded-xl bg-clinic-primary flex items-center justify-center">
                 <span className="text-lg font-bold text-foreground">C</span>
               </div>
@@ -75,7 +75,7 @@ export function PublicHeader() {
                   to={item.href}
                   className={cn(
                     'px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200',
-                    location.pathname === item.href
+                    location.pathname === item.href || (item.href === '/home' && location.pathname === '/')
                       ? 'bg-clinic-primary/10 text-clinic-primary'
                       : 'text-clinic-text-secondary hover:text-foreground hover:bg-clinic-surface'
                   )}
