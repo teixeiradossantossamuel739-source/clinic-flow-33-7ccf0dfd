@@ -16,10 +16,13 @@ interface WhatsAppNotificationRequest {
   serviceDuration?: number;
   professionalName?: string;
   appointmentId: string;
-  type: 'new_appointment' | 'cancelled' | 'confirmed' | 'payment_analysis' | 'confirmed_to_patient' | 'cancelled_by_patient' | 'rescheduled_by_patient';
+  type: 'new_appointment' | 'cancelled' | 'confirmed' | 'payment_analysis' | 'confirmed_to_patient' | 'cancelled_by_patient' | 'rescheduled_by_patient' | 'goal_achieved';
   amountCents?: number;
   newAppointmentDate?: string;
   newAppointmentTime?: string;
+  goalAmountCents?: number;
+  currentEarningsCents?: number;
+  monthName?: string;
 }
 
 const logStep = (step: string, details?: any) => {
@@ -86,7 +89,10 @@ serve(async (req) => {
       type,
       amountCents,
       newAppointmentDate,
-      newAppointmentTime
+      newAppointmentTime,
+      goalAmountCents,
+      currentEarningsCents,
+      monthName
     } = body;
 
     logStep("Request received", { type, appointmentId, patientName });
@@ -94,33 +100,49 @@ serve(async (req) => {
     // Determine target phone based on notification type
     const targetPhone = type === 'confirmed_to_patient' ? patientPhone : professionalPhone;
 
-    if (!targetPhone) {
-      logStep("No target phone provided");
-      return new Response(JSON.stringify({ 
-        success: false, 
-        message: "Telefone do destinatário não disponível" 
-      }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-        status: 200,
-      });
+    // Skip phone validation for goal_achieved type (uses professionalPhone directly)
+    if (type !== 'goal_achieved') {
+      if (!targetPhone) {
+        logStep("No target phone provided");
+        return new Response(JSON.stringify({ 
+          success: false, 
+          message: "Telefone do destinatário não disponível" 
+        }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          status: 200,
+        });
+      }
+
+      if (!professionalPhone) {
+        logStep("No professional phone provided");
+        return new Response(JSON.stringify({ 
+          success: false, 
+          message: "Telefone do profissional não disponível" 
+        }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          status: 200,
+        });
+      }
+    } else {
+      if (!professionalPhone) {
+        logStep("No professional phone provided for goal notification");
+        return new Response(JSON.stringify({ 
+          success: false, 
+          message: "Telefone do profissional não disponível" 
+        }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          status: 200,
+        });
+      }
     }
 
-    if (!professionalPhone) {
-      logStep("No professional phone provided");
-      return new Response(JSON.stringify({ 
-        success: false, 
-        message: "Telefone do profissional não disponível" 
-      }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-        status: 200,
-      });
-    }
-
-    const formattedDate = formatDate(appointmentDate);
-    const formattedTime = appointmentTime.slice(0, 5);
+    const formattedDate = appointmentDate ? formatDate(appointmentDate) : '';
+    const formattedTime = appointmentTime ? appointmentTime.slice(0, 5) : '';
     let message = '';
 
     const formattedAmount = amountCents ? `R$ ${(amountCents / 100).toFixed(2).replace('.', ',')}` : '';
+    const formattedGoal = goalAmountCents ? `R$ ${(goalAmountCents / 100).toFixed(2).replace('.', ',')}` : '';
+    const formattedCurrentEarnings = currentEarningsCents ? `R$ ${(currentEarningsCents / 100).toFixed(2).replace('.', ',')}` : '';
     const formattedDuration = serviceDuration ? (serviceDuration < 60 ? `${serviceDuration} min` : `${Math.floor(serviceDuration / 60)}h${serviceDuration % 60 > 0 ? ` ${serviceDuration % 60}min` : ''}`) : '';
 
     switch (type) {
@@ -218,12 +240,24 @@ ${serviceName ? `🏥 *Serviço:* ${serviceName}` : ''}
 
 Acesse o painel para confirmar o reagendamento.`;
         break;
+
+      case 'goal_achieved':
+        message = `🎉 *PARABÉNS! META ATINGIDA!* 🎉
+
+Você atingiu sua meta financeira de ${monthName || 'este mês'}!
+
+🎯 *Meta:* ${formattedGoal}
+💰 *Faturamento atual:* ${formattedCurrentEarnings}
+
+Continue assim! Seu esforço e dedicação estão gerando resultados incríveis! 🚀`;
+        break;
         
       default:
         message = `📋 Notificação sobre agendamento de ${patientName} em ${formattedDate} às ${formattedTime}`;
     }
 
-    const whatsappLink = generateWhatsAppLink(targetPhone, message);
+    const phoneToUse = type === 'goal_achieved' ? professionalPhone! : (targetPhone || professionalPhone!);
+    const whatsappLink = generateWhatsAppLink(phoneToUse, message);
 
     logStep("WhatsApp link generated", { type, whatsappLink: whatsappLink.substring(0, 50) + '...' });
 

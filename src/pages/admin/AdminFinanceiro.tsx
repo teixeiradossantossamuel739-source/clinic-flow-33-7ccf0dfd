@@ -75,13 +75,46 @@ export default function AdminFinanceiro() {
 
     if (existingNotif && existingNotif.length > 0) return; // Already notified
 
-    // Create notification
+    // Create notification in database
     await supabase.from('notifications').insert({
       professional_id: professionalId,
       type: 'goal_achieved',
       title: '🎉 Meta Atingida!',
       message: `Parabéns! Você atingiu sua meta de ${formatCurrency(goalAmount)} em ${monthName}. Faturamento atual: ${formatCurrency(currentEarnings)}`,
     });
+
+    // Fetch professional phone for WhatsApp
+    const { data: profData } = await supabase
+      .from('professionals')
+      .select('phone')
+      .eq('id', professionalId)
+      .single();
+
+    if (profData?.phone) {
+      try {
+        const { data: whatsappData } = await supabase.functions.invoke('whatsapp-notify', {
+          body: {
+            professionalPhone: profData.phone,
+            patientName: professionalName,
+            appointmentDate: '',
+            appointmentTime: '',
+            appointmentId: '',
+            type: 'goal_achieved',
+            goalAmountCents: goalAmount,
+            currentEarningsCents: currentEarnings,
+            monthName,
+          },
+        });
+
+        if (whatsappData?.whatsappLink) {
+          // Open WhatsApp link for admin to send
+          window.open(whatsappData.whatsappLink, '_blank');
+          toast.success(`Link do WhatsApp gerado para ${professionalName}!`);
+        }
+      } catch (error) {
+        console.error('Error generating WhatsApp link:', error);
+      }
+    }
   };
 
   useEffect(() => {
