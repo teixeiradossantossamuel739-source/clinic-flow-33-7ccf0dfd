@@ -654,7 +654,121 @@ export default function AdminFinanceiro() {
       yPos += 8;
     });
     
-    // Footer
+    // Specialty Comparison Section - new page
+    doc.addPage();
+    doc.setTextColor(0, 0, 0);
+    doc.setFontSize(14);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Comparativo por Especialidade', 14, 20);
+    
+    if (specialtyComparisonData.length > 0) {
+      // Draw pie chart representation as horizontal bars
+      const specChartStartY = 35;
+      const specBarHeight = 15;
+      const maxBarWidth = 140;
+      const maxSpecRevenue = Math.max(...specialtyComparisonData.map(s => s.revenue));
+      
+      const specColors = [
+        [99, 102, 241],   // Primary blue
+        [34, 197, 94],    // Green
+        [59, 130, 246],   // Blue
+        [168, 85, 247],   // Purple
+        [249, 115, 22],   // Orange
+        [239, 68, 68],    // Red
+        [20, 184, 166],   // Teal
+        [236, 72, 153],   // Pink
+      ];
+      
+      specialtyComparisonData.forEach((spec, index) => {
+        const barY = specChartStartY + index * (specBarHeight + 8);
+        const barWidth = maxSpecRevenue > 0 ? (spec.revenue / maxSpecRevenue) * maxBarWidth : 0;
+        const color = specColors[index % specColors.length];
+        
+        // Label
+        doc.setFontSize(9);
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(60, 60, 60);
+        doc.text(spec.label, 14, barY);
+        
+        // Bar
+        doc.setFillColor(color[0], color[1], color[2]);
+        doc.rect(14, barY + 2, barWidth, 8, 'F');
+        
+        // Value
+        doc.setFontSize(8);
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(80, 80, 80);
+        doc.text(formatCurrency(spec.revenue), 14 + barWidth + 4, barY + 8);
+        
+        // Percentage
+        const percentage = totalSpecialtyRevenue > 0 
+          ? ((spec.revenue / totalSpecialtyRevenue) * 100).toFixed(1) 
+          : '0';
+        doc.text(`(${percentage}%)`, 14 + barWidth + 4 + 35, barY + 8);
+      });
+      
+      // Specialty table
+      const specTableStartY = specChartStartY + specialtyComparisonData.length * (specBarHeight + 8) + 20;
+      
+      doc.setTextColor(0, 0, 0);
+      doc.setFontSize(12);
+      doc.setFont('helvetica', 'bold');
+      doc.text('Detalhamento por Especialidade', 14, specTableStartY);
+      
+      const specColWidths = [50, 40, 25, 35, 40];
+      const specHeaders = ['Especialidade', 'Receita', '%', 'Consultas', 'Ticket Médio'];
+      
+      // Draw header
+      doc.setFillColor(240, 240, 240);
+      doc.rect(14, specTableStartY + 4, 190, 10, 'F');
+      doc.setFontSize(9);
+      doc.setFont('helvetica', 'bold');
+      
+      let specXPos = 14;
+      specHeaders.forEach((header, i) => {
+        doc.text(header, specXPos + 2, specTableStartY + 10);
+        specXPos += specColWidths[i];
+      });
+      
+      // Draw rows
+      doc.setFont('helvetica', 'normal');
+      let specYPos = specTableStartY + 20;
+      
+      specialtyComparisonData.forEach((spec, index) => {
+        if (specYPos > 270) {
+          doc.addPage();
+          specYPos = 20;
+        }
+        
+        // Alternate row background
+        if (index % 2 === 0) {
+          doc.setFillColor(250, 250, 250);
+          doc.rect(14, specYPos - 5, 190, 8, 'F');
+        }
+        
+        const percentage = totalSpecialtyRevenue > 0 
+          ? ((spec.revenue / totalSpecialtyRevenue) * 100).toFixed(1)
+          : '0';
+        
+        specXPos = 14;
+        const specRow = [
+          spec.label.substring(0, 20),
+          formatCurrency(spec.revenue),
+          `${percentage}%`,
+          spec.appointments.toString(),
+          formatCurrency(spec.averageTicket),
+        ];
+        
+        specRow.forEach((cell, i) => {
+          doc.text(cell, specXPos + 2, specYPos);
+          specXPos += specColWidths[i];
+        });
+        
+        specYPos += 8;
+      });
+    }
+    
+    // Footer on last page
     doc.setFontSize(8);
     doc.setTextColor(128, 128, 128);
     doc.text(`Gerado em ${format(new Date(), "dd/MM/yyyy 'às' HH:mm")}`, 14, 285);
