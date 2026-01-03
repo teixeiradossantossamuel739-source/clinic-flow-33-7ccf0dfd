@@ -13,6 +13,7 @@ import {
   X,
   Bell,
   Search,
+  DollarSign,
 } from 'lucide-react';
 import { useState, useMemo } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
@@ -23,6 +24,7 @@ const allNavItems = [
   { name: 'Agenda', href: '/admin/agenda', icon: Calendar, adminOnly: false },
   { name: 'Pacientes', href: '/admin/pacientes', icon: Users, adminOnly: false },
   { name: 'Funcionários', href: '/admin/funcionarios', icon: Users, adminOnly: true },
+  { name: 'Financeiro', href: '/admin/financeiro', icon: DollarSign, adminOnly: true },
   { name: 'Serviços', href: '/admin/servicos', icon: Stethoscope, adminOnly: true },
   { name: 'Relatórios', href: '/admin/relatorios', icon: FileText, adminOnly: true },
   { name: 'Configurações', href: '/admin/configuracoes', icon: Settings, adminOnly: true },
