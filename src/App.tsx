@@ -26,7 +26,7 @@ import AdminSettings from "./pages/admin/AdminSettings";
 import AdminProfessionals from "./pages/admin/AdminProfessionals";
 import ProfessionalDashboard from "./pages/admin/ProfessionalDashboard";
 import FuncionarioDashboard from "./pages/funcionario/FuncionarioDashboard";
-import FuncionarioAgendaSimplificada from "./pages/funcionario/FuncionarioAgendaSimplificada";
+import FuncionarioAgenda from "./pages/funcionario/FuncionarioAgenda";
 import FuncionarioFinanceiro from "./pages/funcionario/FuncionarioFinanceiro";
 import FuncionarioDisponibilidade from "./pages/funcionario/FuncionarioDisponibilidade";
 import FuncionarioPerfil from "./pages/funcionario/FuncionarioPerfil";
@@ -160,7 +160,7 @@ const App = () => (
               path="/funcionario/agenda"
               element={
                 <ProtectedRoute allowedRoles={['funcionario', 'admin']}>
-                  <FuncionarioAgendaSimplificada />
+                  <FuncionarioAgenda />
                 </ProtectedRoute>
               }
             />
