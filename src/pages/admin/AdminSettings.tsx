@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { AdminLayout } from '@/components/layout/AdminLayout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -6,17 +6,26 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
   Building2,
   Clock,
   Bell,
-  MessageSquare,
-  Palette,
-  Shield,
+  CreditCard,
   Save,
+  Loader2,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { supabase } from '@/integrations/supabase/client';
 
 export default function AdminSettings() {
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
   const [settings, setSettings] = useState({
     clinicName: 'Clínica Vida',
     phone: '(11) 3456-7890',
@@ -28,10 +37,58 @@ export default function AdminSettings() {
     emailReminders: true,
     reminderHours: 24,
     autoConfirm: false,
+    paymentReminderDays: '3',
   });
 
-  const handleSave = () => {
-    toast.success('Configurações salvas com sucesso!');
+  useEffect(() => {
+    fetchSettings();
+  }, []);
+
+  const fetchSettings = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('clinic_settings')
+        .select('*');
+
+      if (error) throw error;
+
+      if (data) {
+        const settingsMap: Record<string, string> = {};
+        data.forEach((item: any) => {
+          settingsMap[item.setting_key] = item.setting_value;
+        });
+
+        setSettings(prev => ({
+          ...prev,
+          paymentReminderDays: settingsMap['payment_reminder_days'] || '3',
+        }));
+      }
+    } catch (error) {
+      console.error('Error fetching settings:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      const { error } = await supabase
+        .from('clinic_settings')
+        .upsert(
+          { setting_key: 'payment_reminder_days', setting_value: settings.paymentReminderDays },
+          { onConflict: 'setting_key' }
+        );
+
+      if (error) throw error;
+
+      toast.success('Configurações salvas com sucesso!');
+    } catch (error: any) {
+      console.error('Error saving settings:', error);
+      toast.error('Erro ao salvar configurações');
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -200,11 +257,47 @@ export default function AdminSettings() {
           </div>
         </div>
 
+        {/* Payment Reminders */}
+        <div className="bg-background rounded-2xl p-6 shadow-clinic-sm">
+          <div className="flex items-center gap-3 mb-6">
+            <div className="h-10 w-10 rounded-xl bg-clinic-primary/10 flex items-center justify-center">
+              <CreditCard className="h-5 w-5 text-clinic-primary" />
+            </div>
+            <div>
+              <h3 className="font-semibold">Lembretes de Pagamento</h3>
+              <p className="text-sm text-clinic-text-muted">Configure lembretes para profissionais</p>
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="paymentReminderDays">Dias antes do vencimento para lembrete</Label>
+              <Select
+                value={settings.paymentReminderDays}
+                onValueChange={(value) => setSettings({ ...settings, paymentReminderDays: value })}
+              >
+                <SelectTrigger className="max-w-[200px]">
+                  <SelectValue placeholder="Selecione os dias" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="1">1 dia antes</SelectItem>
+                  <SelectItem value="3">3 dias antes</SelectItem>
+                  <SelectItem value="5">5 dias antes</SelectItem>
+                  <SelectItem value="7">7 dias antes</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-clinic-text-muted">
+                Define com quantos dias de antecedência o sistema irá identificar pagamentos próximos do vencimento
+              </p>
+            </div>
+          </div>
+        </div>
+
         {/* Save Button */}
         <div className="flex justify-end">
-          <Button variant="clinic" size="lg" onClick={handleSave}>
-            <Save className="h-4 w-4" />
-            Salvar Alterações
+          <Button variant="clinic" size="lg" onClick={handleSave} disabled={saving}>
+            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+            {saving ? 'Salvando...' : 'Salvar Alterações'}
           </Button>
         </div>
       </div>

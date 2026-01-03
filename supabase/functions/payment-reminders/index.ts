@@ -60,23 +60,33 @@ serve(async (req) => {
       { auth: { persistSession: false } }
     );
 
-    // Get today's date and the date 3 days from now
+    // Fetch the payment reminder days setting
+    const { data: settingData, error: settingError } = await supabaseClient
+      .from('clinic_settings')
+      .select('setting_value')
+      .eq('setting_key', 'payment_reminder_days')
+      .single();
+
+    const reminderDays = settingData?.setting_value ? parseInt(settingData.setting_value) : 3;
+    logStep("Reminder days setting", { days: reminderDays });
+
+    // Get today's date and the date X days from now based on setting
     const today = new Date();
-    const threeDaysFromNow = new Date(today);
-    threeDaysFromNow.setDate(threeDaysFromNow.getDate() + 3);
+    const futureDate = new Date(today);
+    futureDate.setDate(futureDate.getDate() + reminderDays);
     
     const todayStr = today.toISOString().split('T')[0];
-    const threeDaysStr = threeDaysFromNow.toISOString().split('T')[0];
+    const futureDateStr = futureDate.toISOString().split('T')[0];
 
-    logStep("Checking payments due between", { today: todayStr, threeDays: threeDaysStr });
+    logStep("Checking payments due between", { today: todayStr, futureDate: futureDateStr });
 
-    // Fetch pending payments with due date within the next 3 days
+    // Fetch pending payments with due date within the configured days
     const { data: payments, error: paymentsError } = await supabaseClient
       .from('professional_payments')
       .select('*, professionals(id, name, phone, email)')
       .eq('status', 'pending')
       .gte('due_date', todayStr)
-      .lte('due_date', threeDaysStr);
+      .lte('due_date', futureDateStr);
 
     if (paymentsError) {
       logStep("Error fetching payments", { error: paymentsError.message });
