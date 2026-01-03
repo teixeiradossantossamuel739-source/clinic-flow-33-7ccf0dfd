@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react';
 import { AdminLayout } from '@/components/layout/AdminLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { supabase } from '@/integrations/supabase/client';
-import { DollarSign, TrendingUp, Users, Calendar, Filter } from 'lucide-react';
+import { DollarSign, TrendingUp, Users, Calendar, Filter, UserCheck } from 'lucide-react';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { format, startOfMonth, endOfMonth, subMonths } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -44,6 +45,7 @@ export default function AdminFinanceiro() {
   const [monthlyChartData, setMonthlyChartData] = useState<MonthlyChartData[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedMonth, setSelectedMonth] = useState<string>(format(new Date(), 'yyyy-MM'));
+  const [selectedProfessionals, setSelectedProfessionals] = useState<string[]>([]);
 
   useEffect(() => {
     fetchData();
@@ -65,7 +67,11 @@ export default function AdminFinanceiro() {
         .eq('is_active', true);
 
       setProfessionals(profData || []);
-
+      
+      // Initialize selected professionals if empty
+      if (selectedProfessionals.length === 0 && profData && profData.length > 0) {
+        setSelectedProfessionals(profData.map(p => p.id));
+      }
       // Fetch completed appointments in the month
       const { data: appointments } = await supabase
         .from('appointments')
@@ -175,6 +181,24 @@ export default function AdminFinanceiro() {
   const totalRevenue = earnings.reduce((sum, e) => sum + e.totalEarnings, 0);
   const totalAppointments = earnings.reduce((sum, e) => sum + e.appointmentCount, 0);
 
+  const toggleProfessional = (profId: string) => {
+    setSelectedProfessionals(prev => 
+      prev.includes(profId) 
+        ? prev.filter(id => id !== profId)
+        : [...prev, profId]
+    );
+  };
+
+  const toggleAllProfessionals = () => {
+    if (selectedProfessionals.length === professionals.length) {
+      setSelectedProfessionals([]);
+    } else {
+      setSelectedProfessionals(professionals.map(p => p.id));
+    }
+  };
+
+  const filteredProfessionals = professionals.filter(p => selectedProfessionals.includes(p.id));
+
   return (
     <AdminLayout>
       <div className="space-y-6">
@@ -251,16 +275,57 @@ export default function AdminFinanceiro() {
 
         {/* Monthly Evolution Chart */}
         <Card>
-          <CardHeader>
+          <CardHeader className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <CardTitle className="flex items-center gap-2">
               <TrendingUp className="h-5 w-5" />
               Evolução Mensal de Ganhos
             </CardTitle>
+            
+            {/* Professional Filter */}
+            {professionals.length > 0 && (
+              <div className="flex flex-wrap items-center gap-3">
+                <div className="flex items-center gap-2">
+                  <UserCheck className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-sm text-muted-foreground">Filtrar:</span>
+                </div>
+                <div 
+                  className="flex items-center gap-2 cursor-pointer hover:bg-muted/50 px-2 py-1 rounded"
+                  onClick={toggleAllProfessionals}
+                >
+                  <Checkbox 
+                    checked={selectedProfessionals.length === professionals.length}
+                    className="h-4 w-4"
+                  />
+                  <span className="text-sm font-medium">Todos</span>
+                </div>
+                {professionals.map((prof, index) => (
+                  <div 
+                    key={prof.id}
+                    className="flex items-center gap-2 cursor-pointer hover:bg-muted/50 px-2 py-1 rounded"
+                    onClick={() => toggleProfessional(prof.id)}
+                  >
+                    <Checkbox 
+                      checked={selectedProfessionals.includes(prof.id)}
+                      className="h-4 w-4"
+                    />
+                    <div 
+                      className="w-3 h-3 rounded-full" 
+                      style={{ backgroundColor: CHART_COLORS[index % CHART_COLORS.length] }}
+                    />
+                    <span className="text-sm">{prof.name.split(' ')[0]}</span>
+                  </div>
+                ))}
+              </div>
+            )}
           </CardHeader>
           <CardContent>
             {professionals.length === 0 ? (
               <div className="text-center py-8 text-muted-foreground">
                 Nenhum profissional encontrado
+              </div>
+            ) : filteredProfessionals.length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground">
+                Selecione ao menos um profissional
               </div>
             ) : (
               <div className="h-[350px]">
@@ -287,16 +352,18 @@ export default function AdminFinanceiro() {
                     />
                     <Legend />
                     {professionals.map((prof, index) => (
-                      <Line
-                        key={prof.id}
-                        type="monotone"
-                        dataKey={prof.id}
-                        name={prof.name}
-                        stroke={CHART_COLORS[index % CHART_COLORS.length]}
-                        strokeWidth={2}
-                        dot={{ r: 4 }}
-                        activeDot={{ r: 6 }}
-                      />
+                      selectedProfessionals.includes(prof.id) && (
+                        <Line
+                          key={prof.id}
+                          type="monotone"
+                          dataKey={prof.id}
+                          name={prof.name}
+                          stroke={CHART_COLORS[index % CHART_COLORS.length]}
+                          strokeWidth={2}
+                          dot={{ r: 4 }}
+                          activeDot={{ r: 6 }}
+                        />
+                      )
                     ))}
                   </LineChart>
                 </ResponsiveContainer>
