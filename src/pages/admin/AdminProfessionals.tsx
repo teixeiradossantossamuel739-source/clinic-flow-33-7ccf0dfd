@@ -61,6 +61,16 @@ interface Professional {
   review_count: number | null;
   is_active: boolean;
   profession: string;
+  payment_type: string;
+  payment_percentage: number | null;
+  fixed_room_value_cents: number | null;
+  room_id: string | null;
+}
+
+interface Room {
+  id: string;
+  name: string;
+  rental_value_cents: number;
 }
 
 interface ProfessionalSchedule {
@@ -106,6 +116,7 @@ const DAYS_OF_WEEK = [
 export default function AdminProfessionals() {
   const [professionals, setProfessionals] = useState<Professional[]>([]);
   const [schedules, setSchedules] = useState<ProfessionalSchedule[]>([]);
+  const [rooms, setRooms] = useState<Room[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -115,13 +126,15 @@ export default function AdminProfessionals() {
   const [showInactive, setShowInactive] = useState(false);
 
   const fetchData = async () => {
-    const [profRes, schedRes] = await Promise.all([
+    const [profRes, schedRes, roomsRes] = await Promise.all([
       supabase.from('professionals').select('*').order('name'),
       supabase.from('professional_schedules').select('*'),
+      supabase.from('clinic_rooms').select('*').eq('is_active', true),
     ]);
 
     if (profRes.data) setProfessionals(profRes.data);
     if (schedRes.data) setSchedules(schedRes.data);
+    if (roomsRes.data) setRooms(roomsRes.data);
     setLoading(false);
   };
 
@@ -230,6 +243,7 @@ export default function AdminProfessionals() {
               </DialogHeader>
               <ProfessionalForm
                 professional={editingProfessional}
+                rooms={rooms}
                 onSuccess={() => {
                   setDialogOpen(false);
                   fetchData();
@@ -358,6 +372,18 @@ export default function AdminProfessionals() {
                 {professional.crm && (
                   <p className="text-xs text-clinic-text-muted">CRM: {professional.crm}</p>
                 )}
+                <div className="flex items-center gap-2 text-xs">
+                  <span className={`px-2 py-0.5 rounded-full ${
+                    professional.payment_type === 'percentage' 
+                      ? 'bg-blue-100 text-blue-700' 
+                      : 'bg-purple-100 text-purple-700'
+                  }`}>
+                    {professional.payment_type === 'percentage' 
+                      ? `${professional.payment_percentage || 50}% Percentual`
+                      : `R$ ${((professional.fixed_room_value_cents || 0) / 100).toFixed(2)} Sala Fixa`
+                    }
+                  </span>
+                </div>
               </div>
 
               <div className="flex items-center gap-2 mb-3">
@@ -431,10 +457,11 @@ export default function AdminProfessionals() {
 
 interface ProfessionalFormProps {
   professional: Professional | null;
+  rooms: Room[];
   onSuccess: () => void;
 }
 
-function ProfessionalForm({ professional, onSuccess }: ProfessionalFormProps) {
+function ProfessionalForm({ professional, rooms, onSuccess }: ProfessionalFormProps) {
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -447,6 +474,10 @@ function ProfessionalForm({ professional, onSuccess }: ProfessionalFormProps) {
     crm: professional?.crm || '',
     bio: professional?.bio || '',
     avatar_url: professional?.avatar_url || '',
+    payment_type: professional?.payment_type || 'percentage',
+    payment_percentage: professional?.payment_percentage || 50,
+    fixed_room_value_cents: professional?.fixed_room_value_cents || 0,
+    room_id: professional?.room_id || null,
   });
   const [previewUrl, setPreviewUrl] = useState<string>(professional?.avatar_url || '');
 
@@ -680,6 +711,86 @@ function ProfessionalForm({ professional, onSuccess }: ProfessionalFormProps) {
           rows={3}
           placeholder="Breve descrição sobre o profissional..."
         />
+      </div>
+
+      {/* Payment Configuration */}
+      <div className="border-t pt-4 mt-4">
+        <h3 className="font-medium mb-3">Configuração de Pagamento</h3>
+        
+        <div className="space-y-2 mb-4">
+          <Label htmlFor="payment_type">Tipo de Pagamento</Label>
+          <select
+            id="payment_type"
+            value={formData.payment_type}
+            onChange={(e) => setFormData({ ...formData, payment_type: e.target.value })}
+            className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm"
+          >
+            <option value="percentage">Percentual (clínica recebe % do faturamento)</option>
+            <option value="fixed_room">Sala Fixa (funcionário paga valor fixo)</option>
+          </select>
+        </div>
+
+        {formData.payment_type === 'percentage' ? (
+          <div className="space-y-2">
+            <Label htmlFor="payment_percentage">Percentual da Clínica (%)</Label>
+            <Input
+              id="payment_percentage"
+              type="number"
+              min="0"
+              max="100"
+              step="0.5"
+              value={formData.payment_percentage}
+              onChange={(e) => setFormData({ ...formData, payment_percentage: parseFloat(e.target.value) || 0 })}
+            />
+            <p className="text-xs text-muted-foreground">
+              A clínica receberá {formData.payment_percentage}% do faturamento do profissional
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="room_id">Sala Utilizada</Label>
+              <select
+                id="room_id"
+                value={formData.room_id || ''}
+                onChange={(e) => {
+                  const selectedRoom = rooms.find(r => r.id === e.target.value);
+                  setFormData({ 
+                    ...formData, 
+                    room_id: e.target.value || null,
+                    fixed_room_value_cents: selectedRoom?.rental_value_cents || formData.fixed_room_value_cents
+                  });
+                }}
+                className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm"
+              >
+                <option value="">Selecionar sala...</option>
+                {rooms.map((room) => (
+                  <option key={room.id} value={room.id}>
+                    {room.name} - R$ {(room.rental_value_cents / 100).toFixed(2)}/mês
+                  </option>
+                ))}
+              </select>
+            </div>
+            
+            <div className="space-y-2">
+              <Label htmlFor="fixed_room_value">Valor Fixo Mensal (R$)</Label>
+              <Input
+                id="fixed_room_value"
+                type="number"
+                min="0"
+                step="0.01"
+                value={(formData.fixed_room_value_cents / 100).toFixed(2)}
+                onChange={(e) => setFormData({ 
+                  ...formData, 
+                  fixed_room_value_cents: Math.round(parseFloat(e.target.value || '0') * 100)
+                })}
+              />
+              <p className="text-xs text-muted-foreground">
+                O profissional pagará R$ {(formData.fixed_room_value_cents / 100).toFixed(2)} por mês
+              </p>
+            </div>
+          </div>
+        )}
       </div>
 
       <Button type="submit" variant="clinic" className="w-full" disabled={loading}>
