@@ -337,6 +337,19 @@ export default function AdminFinanceiro() {
     ? ((totalAppointments - previousMonthTotals.appointments) / previousMonthTotals.appointments) * 100 
     : totalAppointments > 0 ? 100 : 0;
 
+  const specialtyLabels: Record<string, string> = {
+    'cardiologia': 'Cardiologia',
+    'dermatologia': 'Dermatologia',
+    'ortopedia': 'Ortopedia',
+    'pediatria': 'Pediatria',
+    'psicologia': 'Psicologia',
+    'nutricao': 'Nutrição',
+    'fisioterapia': 'Fisioterapia',
+    'clinica-geral': 'Clínica Geral',
+    'ginecologia': 'Ginecologia',
+    'neurologia': 'Neurologia',
+  };
+
   // Calculate specialty comparison data
   const specialtyComparisonData: SpecialtyData[] = specialties.map(spec => {
     const specProfessionals = earnings.filter(e => e.professional.specialty_id === spec);
@@ -656,18 +669,6 @@ export default function AdminFinanceiro() {
     (selectedSpecialty === 'all' || p.specialty_id === selectedSpecialty)
   );
 
-  const specialtyLabels: Record<string, string> = {
-    'cardiologia': 'Cardiologia',
-    'dermatologia': 'Dermatologia',
-    'ortopedia': 'Ortopedia',
-    'pediatria': 'Pediatria',
-    'psicologia': 'Psicologia',
-    'nutricao': 'Nutrição',
-    'fisioterapia': 'Fisioterapia',
-    'clinica-geral': 'Clínica Geral',
-    'ginecologia': 'Ginecologia',
-    'neurologia': 'Neurologia',
-  };
 
   return (
     <AdminLayout>
