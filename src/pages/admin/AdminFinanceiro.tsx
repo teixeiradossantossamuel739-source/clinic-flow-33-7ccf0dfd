@@ -2,12 +2,17 @@ import { useState, useEffect } from 'react';
 import { AdminLayout } from '@/components/layout/AdminLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { supabase } from '@/integrations/supabase/client';
-import { DollarSign, TrendingUp, Users, Calendar, Filter, UserCheck, ArrowUp, ArrowDown, Minus } from 'lucide-react';
+import { DollarSign, TrendingUp, Users, Calendar, Filter, UserCheck, ArrowUp, ArrowDown, Minus, Target, Pencil } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { format, startOfMonth, endOfMonth, subMonths } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine, Cell } from 'recharts';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { toast } from 'sonner';
 
 interface Professional {
   id: string;
@@ -24,6 +29,7 @@ interface ProfessionalEarning {
   previousEarnings?: number;
   previousAppointments?: number;
   goalAmount?: number;
+  goalId?: string;
 }
 
 interface MonthlyChartData {
@@ -50,6 +56,9 @@ export default function AdminFinanceiro() {
   const [selectedMonth, setSelectedMonth] = useState<string>(format(new Date(), 'yyyy-MM'));
   const [selectedProfessionals, setSelectedProfessionals] = useState<string[]>([]);
   const [previousMonthTotals, setPreviousMonthTotals] = useState<{ revenue: number; appointments: number }>({ revenue: 0, appointments: 0 });
+  const [goalsDialogOpen, setGoalsDialogOpen] = useState(false);
+  const [goalInputs, setGoalInputs] = useState<Record<string, string>>({});
+  const [savingGoals, setSavingGoals] = useState(false);
 
   useEffect(() => {
     fetchData();
@@ -80,13 +89,13 @@ export default function AdminFinanceiro() {
       // Fetch goals for the selected month
       const { data: goalsData } = await supabase
         .from('professional_goals')
-        .select('professional_id, goal_amount_cents')
+        .select('id, professional_id, goal_amount_cents')
         .eq('month', month)
         .eq('year', year);
 
-      const goalsMap = new Map<string, number>();
+      const goalsMap = new Map<string, { amount: number; id: string }>();
       (goalsData || []).forEach((goal) => {
-        goalsMap.set(goal.professional_id, goal.goal_amount_cents);
+        goalsMap.set(goal.professional_id, { amount: goal.goal_amount_cents, id: goal.id });
       });
 
       // Fetch completed appointments in the month
@@ -153,7 +162,8 @@ export default function AdminFinanceiro() {
           averageTicket: data.count > 0 ? data.total / data.count : 0,
           previousEarnings: prevData.total,
           previousAppointments: prevData.count,
-          goalAmount: goal,
+          goalAmount: goal?.amount,
+          goalId: goal?.id,
         };
       });
 
@@ -251,6 +261,62 @@ export default function AdminFinanceiro() {
     if (variation > 0) return 'text-green-500';
     if (variation < 0) return 'text-red-500';
     return 'text-muted-foreground';
+  };
+
+  const openGoalsDialog = () => {
+    const inputs: Record<string, string> = {};
+    earnings.forEach(e => {
+      inputs[e.professional.id] = e.goalAmount ? (e.goalAmount / 100).toString() : '';
+    });
+    setGoalInputs(inputs);
+    setGoalsDialogOpen(true);
+  };
+
+  const handleSaveGoals = async () => {
+    setSavingGoals(true);
+    try {
+      const [year, month] = selectedMonth.split('-').map(Number);
+      
+      for (const earning of earnings) {
+        const inputValue = goalInputs[earning.professional.id];
+        const goalCents = inputValue ? Math.round(parseFloat(inputValue) * 100) : 0;
+        
+        if (goalCents > 0) {
+          if (earning.goalId) {
+            // Update existing goal
+            await supabase
+              .from('professional_goals')
+              .update({ goal_amount_cents: goalCents })
+              .eq('id', earning.goalId);
+          } else {
+            // Insert new goal
+            await supabase
+              .from('professional_goals')
+              .insert({
+                professional_id: earning.professional.id,
+                month,
+                year,
+                goal_amount_cents: goalCents,
+              });
+          }
+        } else if (earning.goalId) {
+          // Delete goal if value is 0 or empty
+          await supabase
+            .from('professional_goals')
+            .delete()
+            .eq('id', earning.goalId);
+        }
+      }
+
+      toast.success('Metas salvas com sucesso!');
+      setGoalsDialogOpen(false);
+      fetchData();
+    } catch (error) {
+      console.error('Error saving goals:', error);
+      toast.error('Erro ao salvar metas');
+    } finally {
+      setSavingGoals(false);
+    }
   };
 
   const toggleProfessional = (profId: string) => {
@@ -464,11 +530,68 @@ export default function AdminFinanceiro() {
 
         {/* Comparison Bar Chart with Goals */}
         <Card>
-          <CardHeader>
+          <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle className="flex items-center gap-2">
               <TrendingUp className="h-5 w-5" />
               Comparativo: Mês Atual vs Mês Anterior vs Meta
             </CardTitle>
+            <Dialog open={goalsDialogOpen} onOpenChange={setGoalsDialogOpen}>
+              <DialogTrigger asChild>
+                <Button variant="outline" size="sm" onClick={openGoalsDialog}>
+                  <Target className="h-4 w-4 mr-2" />
+                  Definir Metas
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-md max-h-[80vh] overflow-y-auto">
+                <DialogHeader>
+                  <DialogTitle className="flex items-center gap-2">
+                    <Target className="h-5 w-5" />
+                    Definir Metas - {monthOptions.find(m => m.value === selectedMonth)?.label}
+                  </DialogTitle>
+                </DialogHeader>
+                <div className="space-y-4 py-4">
+                  {earnings.map((e) => (
+                    <div key={e.professional.id} className="flex items-center gap-4">
+                      <div className="flex items-center gap-2 flex-1 min-w-0">
+                        {e.professional.avatar_url ? (
+                          <img
+                            src={e.professional.avatar_url}
+                            alt={e.professional.name}
+                            className="w-8 h-8 rounded-full object-cover flex-shrink-0"
+                          />
+                        ) : (
+                          <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-primary font-medium flex-shrink-0">
+                            {e.professional.name.charAt(0)}
+                          </div>
+                        )}
+                        <span className="font-medium truncate">{e.professional.name}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Label className="text-muted-foreground">R$</Label>
+                        <Input
+                          type="number"
+                          placeholder="0,00"
+                          className="w-28"
+                          value={goalInputs[e.professional.id] || ''}
+                          onChange={(ev) => setGoalInputs(prev => ({
+                            ...prev,
+                            [e.professional.id]: ev.target.value
+                          }))}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div className="flex justify-end gap-2">
+                  <Button variant="outline" onClick={() => setGoalsDialogOpen(false)}>
+                    Cancelar
+                  </Button>
+                  <Button onClick={handleSaveGoals} disabled={savingGoals}>
+                    {savingGoals ? 'Salvando...' : 'Salvar Metas'}
+                  </Button>
+                </div>
+              </DialogContent>
+            </Dialog>
           </CardHeader>
           <CardContent>
             {earnings.length === 0 ? (
