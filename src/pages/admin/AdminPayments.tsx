@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   Select,
   SelectContent,
@@ -41,12 +42,15 @@ import {
   Edit,
   CalendarIcon,
   Search,
+  History,
+  User,
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { format, parse } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface Professional {
   id: string;
@@ -75,6 +79,20 @@ interface Payment {
   professional?: Professional;
 }
 
+interface PaymentHistory {
+  id: string;
+  payment_id: string;
+  action: string;
+  changed_by: string | null;
+  changed_by_name: string | null;
+  previous_status: string | null;
+  new_status: string | null;
+  previous_amount_cents: number | null;
+  new_amount_cents: number | null;
+  notes: string | null;
+  created_at: string;
+}
+
 const MONTHS = [
   { value: 1, label: 'Janeiro' },
   { value: 2, label: 'Fevereiro' },
@@ -97,6 +115,7 @@ const STATUS_CONFIG = {
 };
 
 export default function AdminPayments() {
+  const { user, profile } = useAuth();
   const [professionals, setProfessionals] = useState<Professional[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
   const [loading, setLoading] = useState(true);
@@ -118,6 +137,12 @@ export default function AdminPayments() {
     due_date: null as Date | null,
     notes: '',
   });
+
+  // History dialog state
+  const [isHistoryDialogOpen, setIsHistoryDialogOpen] = useState(false);
+  const [selectedPaymentForHistory, setSelectedPaymentForHistory] = useState<Payment | null>(null);
+  const [paymentHistory, setPaymentHistory] = useState<PaymentHistory[]>([]);
+  const [loadingHistory, setLoadingHistory] = useState(false);
 
   useEffect(() => {
     fetchData();
@@ -223,6 +248,32 @@ export default function AdminPayments() {
     setIsPaymentDialogOpen(true);
   };
 
+  const logPaymentHistory = async (
+    paymentId: string,
+    action: string,
+    previousStatus?: string,
+    newStatus?: string,
+    previousAmount?: number,
+    newAmount?: number,
+    notes?: string
+  ) => {
+    try {
+      await supabase.from('professional_payment_history').insert({
+        payment_id: paymentId,
+        action,
+        changed_by: user?.id || null,
+        changed_by_name: profile?.full_name || user?.email || 'Sistema',
+        previous_status: previousStatus || null,
+        new_status: newStatus || null,
+        previous_amount_cents: previousAmount || null,
+        new_amount_cents: newAmount || null,
+        notes: notes || null,
+      });
+    } catch (error) {
+      console.error('Error logging payment history:', error);
+    }
+  };
+
   const handleSavePayment = async () => {
     if (!selectedProfessional) {
       toast.error('Selecione um profissional');
@@ -250,13 +301,41 @@ export default function AdminPayments() {
           .eq('id', editingPayment.id);
 
         if (error) throw error;
+
+        // Log history
+        await logPaymentHistory(
+          editingPayment.id,
+          'updated',
+          editingPayment.status,
+          formData.status,
+          editingPayment.amount_due_cents,
+          formData.amount_due_cents,
+          formData.notes
+        );
+
         toast.success('Pagamento atualizado com sucesso!');
       } else {
-        const { error } = await supabase
+        const { data: newPayment, error } = await supabase
           .from('professional_payments')
-          .insert(paymentData);
+          .insert(paymentData)
+          .select('id')
+          .single();
 
         if (error) throw error;
+
+        // Log history for new payment
+        if (newPayment) {
+          await logPaymentHistory(
+            newPayment.id,
+            'created',
+            undefined,
+            formData.status,
+            undefined,
+            formData.amount_due_cents,
+            'Pagamento criado'
+          );
+        }
+
         toast.success('Pagamento registrado com sucesso!');
       }
 
@@ -280,6 +359,18 @@ export default function AdminPayments() {
         .eq('id', payment.id);
 
       if (error) throw error;
+
+      // Log history
+      await logPaymentHistory(
+        payment.id,
+        'status_changed',
+        payment.status,
+        'paid',
+        undefined,
+        undefined,
+        'Marcado como pago'
+      );
+
       toast.success('Pagamento marcado como pago!');
       fetchData();
     } catch (error) {
@@ -296,11 +387,54 @@ export default function AdminPayments() {
         .eq('id', payment.id);
 
       if (error) throw error;
+
+      // Log history
+      await logPaymentHistory(
+        payment.id,
+        'status_changed',
+        payment.status,
+        'next_month',
+        undefined,
+        undefined,
+        'Adiado para próximo mês'
+      );
+
       toast.success('Pagamento adiado para o próximo mês!');
       fetchData();
     } catch (error) {
       console.error('Error deferring payment:', error);
       toast.error('Erro ao adiar pagamento');
+    }
+  };
+
+  const handleOpenHistory = async (payment: Payment) => {
+    setSelectedPaymentForHistory(payment);
+    setIsHistoryDialogOpen(true);
+    setLoadingHistory(true);
+
+    try {
+      const { data, error } = await supabase
+        .from('professional_payment_history')
+        .select('*')
+        .eq('payment_id', payment.id)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      setPaymentHistory(data || []);
+    } catch (error) {
+      console.error('Error fetching history:', error);
+      toast.error('Erro ao carregar histórico');
+    } finally {
+      setLoadingHistory(false);
+    }
+  };
+
+  const getActionLabel = (action: string) => {
+    switch (action) {
+      case 'created': return 'Criado';
+      case 'updated': return 'Atualizado';
+      case 'status_changed': return 'Status alterado';
+      default: return action;
     }
   };
 
@@ -491,13 +625,22 @@ export default function AdminPayments() {
                         </Badge>
                       </TableCell>
                       <TableCell>
-                        <div className="flex gap-2">
+                        <div className="flex gap-1">
                           <Button
                             variant="ghost"
                             size="sm"
                             onClick={() => handleOpenPaymentDialog(payment)}
+                            title="Editar"
                           >
                             <Edit className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleOpenHistory(payment)}
+                            title="Histórico"
+                          >
+                            <History className="h-4 w-4" />
                           </Button>
                           {payment.status === 'pending' && (
                             <>
@@ -506,6 +649,7 @@ export default function AdminPayments() {
                                 size="sm"
                                 className="text-green-600"
                                 onClick={() => handleMarkAsPaid(payment)}
+                                title="Marcar como pago"
                               >
                                 <CheckCircle className="h-4 w-4" />
                               </Button>
@@ -514,6 +658,7 @@ export default function AdminPayments() {
                                 size="sm"
                                 className="text-blue-600"
                                 onClick={() => handleDeferPayment(payment)}
+                                title="Adiar"
                               >
                                 <ArrowRight className="h-4 w-4" />
                               </Button>
@@ -650,6 +795,94 @@ export default function AdminPayments() {
             </Button>
             <Button onClick={handleSavePayment}>
               Salvar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* History Dialog */}
+      <Dialog open={isHistoryDialogOpen} onOpenChange={setIsHistoryDialogOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <History className="h-5 w-5" />
+              Histórico de Alterações
+            </DialogTitle>
+          </DialogHeader>
+          
+          {selectedPaymentForHistory && (
+            <div className="mb-4 p-3 bg-muted rounded-lg">
+              <p className="font-medium">
+                {selectedPaymentForHistory.professional?.name || 'Profissional'}
+              </p>
+              <p className="text-sm text-muted-foreground">
+                {MONTHS.find(m => m.value === selectedPaymentForHistory.month)?.label} / {selectedPaymentForHistory.year}
+              </p>
+            </div>
+          )}
+
+          <ScrollArea className="max-h-[400px]">
+            {loadingHistory ? (
+              <div className="text-center py-8 text-muted-foreground">
+                Carregando histórico...
+              </div>
+            ) : paymentHistory.length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground">
+                Nenhum histórico encontrado
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {paymentHistory.map((entry) => (
+                  <div key={entry.id} className="border-l-2 border-primary pl-4 pb-4">
+                    <div className="flex items-center gap-2 mb-1">
+                      <Badge variant="outline">{getActionLabel(entry.action)}</Badge>
+                      <span className="text-xs text-muted-foreground">
+                        {format(new Date(entry.created_at), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
+                      </span>
+                    </div>
+                    
+                    <div className="flex items-center gap-2 text-sm mb-1">
+                      <User className="h-3 w-3 text-muted-foreground" />
+                      <span>{entry.changed_by_name || 'Sistema'}</span>
+                    </div>
+
+                    {entry.previous_status && entry.new_status && (
+                      <div className="text-sm">
+                        <span className="text-muted-foreground">Status: </span>
+                        <span className={cn(STATUS_CONFIG[entry.previous_status as PaymentStatus]?.textColor)}>
+                          {STATUS_CONFIG[entry.previous_status as PaymentStatus]?.label}
+                        </span>
+                        <span className="mx-1">→</span>
+                        <span className={cn(STATUS_CONFIG[entry.new_status as PaymentStatus]?.textColor)}>
+                          {STATUS_CONFIG[entry.new_status as PaymentStatus]?.label}
+                        </span>
+                      </div>
+                    )}
+
+                    {entry.previous_amount_cents !== null && entry.new_amount_cents !== null && 
+                     entry.previous_amount_cents !== entry.new_amount_cents && (
+                      <div className="text-sm">
+                        <span className="text-muted-foreground">Valor: </span>
+                        <span>{formatCurrency(entry.previous_amount_cents)}</span>
+                        <span className="mx-1">→</span>
+                        <span>{formatCurrency(entry.new_amount_cents)}</span>
+                      </div>
+                    )}
+
+                    {entry.notes && (
+                      <p className="text-sm text-muted-foreground mt-1">
+                        {entry.notes}
+                      </p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </ScrollArea>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsHistoryDialogOpen(false)}>
+              Fechar
             </Button>
           </DialogFooter>
         </DialogContent>
