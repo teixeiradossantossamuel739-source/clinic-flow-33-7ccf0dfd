@@ -56,6 +56,8 @@ export default function AdminFinanceiro() {
   const [loading, setLoading] = useState(true);
   const [selectedMonth, setSelectedMonth] = useState<string>(format(new Date(), 'yyyy-MM'));
   const [selectedProfessionals, setSelectedProfessionals] = useState<string[]>([]);
+  const [selectedSpecialty, setSelectedSpecialty] = useState<string>('all');
+  const [specialties, setSpecialties] = useState<string[]>([]);
   const [previousMonthTotals, setPreviousMonthTotals] = useState<{ revenue: number; appointments: number }>({ revenue: 0, appointments: 0 });
   const [goalsDialogOpen, setGoalsDialogOpen] = useState(false);
   const [goalInputs, setGoalInputs] = useState<Record<string, string>>({});
@@ -138,6 +140,10 @@ export default function AdminFinanceiro() {
         .eq('is_active', true);
 
       setProfessionals(profData || []);
+      
+      // Extract unique specialties
+      const uniqueSpecialties = [...new Set((profData || []).map(p => p.specialty_id))].filter(Boolean);
+      setSpecialties(uniqueSpecialties);
       
       // Initialize selected professionals if empty
       if (selectedProfessionals.length === 0 && profData && profData.length > 0) {
@@ -305,8 +311,14 @@ export default function AdminFinanceiro() {
     };
   });
 
-  const totalRevenue = earnings.reduce((sum, e) => sum + e.totalEarnings, 0);
-  const totalAppointments = earnings.reduce((sum, e) => sum + e.appointmentCount, 0);
+  // Filter earnings by specialty
+  const getFilteredEarnings = () => earnings.filter(e => 
+    selectedSpecialty === 'all' || e.professional.specialty_id === selectedSpecialty
+  );
+
+  const filteredEarningsForCalc = getFilteredEarnings();
+  const totalRevenue = filteredEarningsForCalc.reduce((sum, e) => sum + e.totalEarnings, 0);
+  const totalAppointments = filteredEarningsForCalc.reduce((sum, e) => sum + e.appointmentCount, 0);
 
   const revenueVariation = previousMonthTotals.revenue > 0 
     ? ((totalRevenue - previousMonthTotals.revenue) / previousMonthTotals.revenue) * 100 
@@ -613,7 +625,23 @@ export default function AdminFinanceiro() {
     toast.success('Relatório exportado com sucesso!');
   };
 
-  const filteredProfessionals = professionals.filter(p => selectedProfessionals.includes(p.id));
+  const filteredProfessionals = professionals.filter(p => 
+    selectedProfessionals.includes(p.id) && 
+    (selectedSpecialty === 'all' || p.specialty_id === selectedSpecialty)
+  );
+
+  const specialtyLabels: Record<string, string> = {
+    'cardiologia': 'Cardiologia',
+    'dermatologia': 'Dermatologia',
+    'ortopedia': 'Ortopedia',
+    'pediatria': 'Pediatria',
+    'psicologia': 'Psicologia',
+    'nutricao': 'Nutrição',
+    'fisioterapia': 'Fisioterapia',
+    'clinica-geral': 'Clínica Geral',
+    'ginecologia': 'Ginecologia',
+    'neurologia': 'Neurologia',
+  };
 
   return (
     <AdminLayout>
@@ -627,7 +655,7 @@ export default function AdminFinanceiro() {
             </p>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Button
               variant="outline"
               size="sm"
@@ -638,6 +666,19 @@ export default function AdminFinanceiro() {
               Exportar PDF
             </Button>
             <Filter className="h-4 w-4 text-clinic-text-muted" />
+            <Select value={selectedSpecialty} onValueChange={setSelectedSpecialty}>
+              <SelectTrigger className="w-[150px]">
+                <SelectValue placeholder="Especialidade" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todas</SelectItem>
+                {specialties.map((spec) => (
+                  <SelectItem key={spec} value={spec}>
+                    {specialtyLabels[spec] || spec}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             <Select value={selectedMonth} onValueChange={setSelectedMonth}>
               <SelectTrigger className="w-[180px]">
                 <SelectValue />
@@ -889,7 +930,7 @@ export default function AdminFinanceiro() {
               <div className="h-[400px]">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart 
-                    data={earnings.map(e => ({
+                    data={filteredEarningsForCalc.map(e => ({
                       name: e.professional.name.split(' ')[0],
                       'Mês Atual': e.totalEarnings / 100,
                       'Mês Anterior': (e.previousEarnings || 0) / 100,
@@ -929,7 +970,7 @@ export default function AdminFinanceiro() {
                       dataKey="Mês Atual" 
                       radius={[0, 4, 4, 0]}
                     >
-                      {earnings.map((entry, index) => (
+                      {filteredEarningsForCalc.map((entry, index) => (
                         <Cell 
                           key={`cell-${index}`}
                           fill={entry.goalAmount && entry.totalEarnings >= entry.goalAmount 
@@ -1012,7 +1053,7 @@ export default function AdminFinanceiro() {
                     </tr>
                   </thead>
                   <tbody>
-                    {earnings.map((item, index) => (
+                    {filteredEarningsForCalc.map((item, index) => (
                       <tr
                         key={item.professional.id}
                         className="border-b border-clinic-border-subtle last:border-0 hover:bg-clinic-surface/50 transition-colors"
