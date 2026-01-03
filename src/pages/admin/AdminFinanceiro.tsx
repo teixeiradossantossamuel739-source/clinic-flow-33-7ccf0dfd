@@ -465,13 +465,89 @@ export default function AdminFinanceiro() {
     doc.text(`Profissionais Ativos: ${professionals.length}`, 14, 69);
     doc.text(`Variação vs mês anterior: ${revenueVariation >= 0 ? '+' : ''}${revenueVariation.toFixed(1)}%`, 14, 76);
     
-    // Table header
+    // Evolution Chart Section
     doc.setFontSize(14);
     doc.setFont('helvetica', 'bold');
-    doc.text('Detalhamento por Profissional', 14, 95);
+    doc.text('Evolução Mensal (últimos 6 meses)', 14, 92);
+    
+    if (monthlyChartData.length > 0 && filteredProfessionals.length > 0) {
+      const chartStartY = 100;
+      const chartHeight = 50;
+      const chartWidth = 180;
+      const barGroupWidth = chartWidth / monthlyChartData.length;
+      
+      // Find max value for scaling
+      let maxValue = 0;
+      monthlyChartData.forEach(data => {
+        filteredProfessionals.forEach(prof => {
+          const val = data[prof.id] as number || 0;
+          if (val > maxValue) maxValue = val;
+        });
+      });
+      
+      if (maxValue > 0) {
+        // Draw Y-axis labels
+        doc.setFontSize(7);
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(100, 100, 100);
+        doc.text(formatCurrency(maxValue * 100), 14, chartStartY);
+        doc.text(formatCurrency((maxValue / 2) * 100), 14, chartStartY + chartHeight / 2);
+        doc.text('R$ 0', 14, chartStartY + chartHeight);
+        
+        // Draw bars
+        const colors = [
+          [99, 102, 241],   // Primary blue
+          [34, 197, 94],    // Green
+          [59, 130, 246],   // Blue
+          [168, 85, 247],   // Purple
+          [249, 115, 22],   // Orange
+          [239, 68, 68],    // Red
+        ];
+        
+        monthlyChartData.forEach((data, monthIndex) => {
+          const groupX = 30 + monthIndex * barGroupWidth;
+          const barWidth = Math.min(12, (barGroupWidth - 8) / Math.max(filteredProfessionals.length, 1));
+          
+          filteredProfessionals.slice(0, 4).forEach((prof, profIndex) => {
+            const value = data[prof.id] as number || 0;
+            const barHeight = (value / maxValue) * chartHeight;
+            const barX = groupX + profIndex * (barWidth + 2);
+            const barY = chartStartY + chartHeight - barHeight;
+            
+            const color = colors[profIndex % colors.length];
+            doc.setFillColor(color[0], color[1], color[2]);
+            doc.rect(barX, barY, barWidth, barHeight, 'F');
+          });
+          
+          // Month label
+          doc.setFontSize(7);
+          doc.setTextColor(80, 80, 80);
+          doc.text(data.month, groupX + barGroupWidth / 2 - 8, chartStartY + chartHeight + 6);
+        });
+        
+        // Legend
+        doc.setFontSize(7);
+        let legendX = 14;
+        const legendY = chartStartY + chartHeight + 15;
+        filteredProfessionals.slice(0, 4).forEach((prof, index) => {
+          const color = colors[index % colors.length];
+          doc.setFillColor(color[0], color[1], color[2]);
+          doc.rect(legendX, legendY - 3, 4, 4, 'F');
+          doc.setTextColor(60, 60, 60);
+          doc.text(prof.name.substring(0, 15), legendX + 6, legendY);
+          legendX += 45;
+        });
+      }
+    }
+    
+    // Table header
+    doc.setTextColor(0, 0, 0);
+    doc.setFontSize(14);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Detalhamento por Profissional', 14, 175);
     
     // Table
-    const tableStartY = 105;
+    const tableStartY = 185;
     const colWidths = [60, 35, 30, 35, 30];
     const headers = ['Profissional', 'Faturamento', 'Consultas', 'Ticket Médio', 'Meta'];
     
@@ -520,7 +596,7 @@ export default function AdminFinanceiro() {
       // Goal status indicator
       if (earning.goalAmount && earning.totalEarnings >= earning.goalAmount) {
         doc.setTextColor(34, 197, 94);
-        doc.text('✓', xPos - 5, yPos);
+        doc.text('OK', xPos - 8, yPos);
         doc.setTextColor(0, 0, 0);
       }
       
