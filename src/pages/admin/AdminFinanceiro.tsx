@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { AdminLayout } from '@/components/layout/AdminLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { supabase } from '@/integrations/supabase/client';
-import { DollarSign, TrendingUp, Users, Calendar, Filter, UserCheck } from 'lucide-react';
+import { DollarSign, TrendingUp, Users, Calendar, Filter, UserCheck, ArrowUp, ArrowDown, Minus } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { format, startOfMonth, endOfMonth, subMonths } from 'date-fns';
@@ -21,6 +21,8 @@ interface ProfessionalEarning {
   totalEarnings: number;
   appointmentCount: number;
   averageTicket: number;
+  previousEarnings?: number;
+  previousAppointments?: number;
 }
 
 interface MonthlyChartData {
@@ -46,6 +48,7 @@ export default function AdminFinanceiro() {
   const [loading, setLoading] = useState(true);
   const [selectedMonth, setSelectedMonth] = useState<string>(format(new Date(), 'yyyy-MM'));
   const [selectedProfessionals, setSelectedProfessionals] = useState<string[]>([]);
+  const [previousMonthTotals, setPreviousMonthTotals] = useState<{ revenue: number; appointments: number }>({ revenue: 0, appointments: 0 });
 
   useEffect(() => {
     fetchData();
@@ -72,6 +75,7 @@ export default function AdminFinanceiro() {
       if (selectedProfessionals.length === 0 && profData && profData.length > 0) {
         setSelectedProfessionals(profData.map(p => p.id));
       }
+
       // Fetch completed appointments in the month
       const { data: appointments } = await supabase
         .from('appointments')
@@ -80,6 +84,36 @@ export default function AdminFinanceiro() {
         .lte('appointment_date', format(endDate, 'yyyy-MM-dd'))
         .eq('status', 'completed')
         .eq('payment_status', 'paid');
+
+      // Fetch previous month data for comparison
+      const prevMonthDate = subMonths(new Date(year, month - 1), 1);
+      const prevStartDate = startOfMonth(prevMonthDate);
+      const prevEndDate = endOfMonth(prevMonthDate);
+
+      const { data: prevAppointments } = await supabase
+        .from('appointments')
+        .select('professional_uuid, amount_cents, status, payment_status')
+        .gte('appointment_date', format(prevStartDate, 'yyyy-MM-dd'))
+        .lte('appointment_date', format(prevEndDate, 'yyyy-MM-dd'))
+        .eq('status', 'completed')
+        .eq('payment_status', 'paid');
+
+      // Calculate previous month totals
+      const prevTotal = (prevAppointments || []).reduce((sum, apt) => sum + apt.amount_cents, 0);
+      const prevCount = (prevAppointments || []).length;
+      setPreviousMonthTotals({ revenue: prevTotal, appointments: prevCount });
+
+      // Calculate previous earnings per professional
+      const prevEarningsMap = new Map<string, { total: number; count: number }>();
+      (prevAppointments || []).forEach((apt) => {
+        if (apt.professional_uuid) {
+          const current = prevEarningsMap.get(apt.professional_uuid) || { total: 0, count: 0 };
+          prevEarningsMap.set(apt.professional_uuid, {
+            total: current.total + apt.amount_cents,
+            count: current.count + 1,
+          });
+        }
+      });
 
       // Calculate earnings per professional
       const earningsMap = new Map<string, { total: number; count: number }>();
@@ -97,11 +131,14 @@ export default function AdminFinanceiro() {
       // Build earnings array
       const earningsArray: ProfessionalEarning[] = (profData || []).map((prof) => {
         const data = earningsMap.get(prof.id) || { total: 0, count: 0 };
+        const prevData = prevEarningsMap.get(prof.id) || { total: 0, count: 0 };
         return {
           professional: prof,
           totalEarnings: data.total,
           appointmentCount: data.count,
           averageTicket: data.count > 0 ? data.total / data.count : 0,
+          previousEarnings: prevData.total,
+          previousAppointments: prevData.count,
         };
       });
 
@@ -181,6 +218,26 @@ export default function AdminFinanceiro() {
   const totalRevenue = earnings.reduce((sum, e) => sum + e.totalEarnings, 0);
   const totalAppointments = earnings.reduce((sum, e) => sum + e.appointmentCount, 0);
 
+  const revenueVariation = previousMonthTotals.revenue > 0 
+    ? ((totalRevenue - previousMonthTotals.revenue) / previousMonthTotals.revenue) * 100 
+    : totalRevenue > 0 ? 100 : 0;
+  
+  const appointmentsVariation = previousMonthTotals.appointments > 0 
+    ? ((totalAppointments - previousMonthTotals.appointments) / previousMonthTotals.appointments) * 100 
+    : totalAppointments > 0 ? 100 : 0;
+
+  const getVariationIcon = (variation: number) => {
+    if (variation > 0) return <ArrowUp className="h-4 w-4 text-green-500" />;
+    if (variation < 0) return <ArrowDown className="h-4 w-4 text-red-500" />;
+    return <Minus className="h-4 w-4 text-muted-foreground" />;
+  };
+
+  const getVariationColor = (variation: number) => {
+    if (variation > 0) return 'text-green-500';
+    if (variation < 0) return 'text-red-500';
+    return 'text-muted-foreground';
+  };
+
   const toggleProfessional = (profId: string) => {
     setSelectedProfessionals(prev => 
       prev.includes(profId) 
@@ -228,33 +285,51 @@ export default function AdminFinanceiro() {
           </div>
         </div>
 
-        {/* Summary Cards */}
+        {/* Summary Cards with Comparison */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <Card>
             <CardContent className="pt-6">
-              <div className="flex items-center gap-4">
-                <div className="p-3 rounded-xl bg-green-500/10">
-                  <DollarSign className="h-6 w-6 text-green-500" />
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                  <div className="p-3 rounded-xl bg-green-500/10">
+                    <DollarSign className="h-6 w-6 text-green-500" />
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">Receita Total</p>
+                    <p className="text-2xl font-bold">{formatCurrency(totalRevenue)}</p>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-sm text-clinic-text-secondary">Receita Total</p>
-                  <p className="text-2xl font-bold">{formatCurrency(totalRevenue)}</p>
+                <div className={`flex items-center gap-1 ${getVariationColor(revenueVariation)}`}>
+                  {getVariationIcon(revenueVariation)}
+                  <span className="text-sm font-medium">{Math.abs(revenueVariation).toFixed(1)}%</span>
                 </div>
               </div>
+              <p className="text-xs text-muted-foreground mt-2">
+                vs mês anterior: {formatCurrency(previousMonthTotals.revenue)}
+              </p>
             </CardContent>
           </Card>
 
           <Card>
             <CardContent className="pt-6">
-              <div className="flex items-center gap-4">
-                <div className="p-3 rounded-xl bg-blue-500/10">
-                  <Calendar className="h-6 w-6 text-blue-500" />
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                  <div className="p-3 rounded-xl bg-blue-500/10">
+                    <Calendar className="h-6 w-6 text-blue-500" />
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">Consultas Realizadas</p>
+                    <p className="text-2xl font-bold">{totalAppointments}</p>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-sm text-clinic-text-secondary">Consultas Realizadas</p>
-                  <p className="text-2xl font-bold">{totalAppointments}</p>
+                <div className={`flex items-center gap-1 ${getVariationColor(appointmentsVariation)}`}>
+                  {getVariationIcon(appointmentsVariation)}
+                  <span className="text-sm font-medium">{Math.abs(appointmentsVariation).toFixed(1)}%</span>
                 </div>
               </div>
+              <p className="text-xs text-muted-foreground mt-2">
+                vs mês anterior: {previousMonthTotals.appointments} consultas
+              </p>
             </CardContent>
           </Card>
 
@@ -265,7 +340,7 @@ export default function AdminFinanceiro() {
                   <Users className="h-6 w-6 text-purple-500" />
                 </div>
                 <div>
-                  <p className="text-sm text-clinic-text-secondary">Profissionais Ativos</p>
+                  <p className="text-sm text-muted-foreground">Profissionais Ativos</p>
                   <p className="text-2xl font-bold">{professionals.length}</p>
                 </div>
               </div>
