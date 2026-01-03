@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { AdminLayout } from '@/components/layout/AdminLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { supabase } from '@/integrations/supabase/client';
-import { DollarSign, TrendingUp, Users, Calendar, Filter, UserCheck, ArrowUp, ArrowDown, Minus, Target, Pencil } from 'lucide-react';
+import { DollarSign, TrendingUp, Users, Calendar, Filter, UserCheck, ArrowUp, ArrowDown, Minus, Target, Pencil, FileDown } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { format, startOfMonth, endOfMonth, subMonths } from 'date-fns';
@@ -13,6 +13,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
+import jsPDF from 'jspdf';
 
 interface Professional {
   id: string;
@@ -438,6 +439,104 @@ export default function AdminFinanceiro() {
     }
   };
 
+  const exportToPDF = () => {
+    const doc = new jsPDF();
+    const [year, month] = selectedMonth.split('-').map(Number);
+    const monthLabel = format(new Date(year, month - 1), 'MMMM yyyy', { locale: ptBR });
+    
+    // Title
+    doc.setFontSize(20);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Relatório Financeiro', 105, 20, { align: 'center' });
+    
+    doc.setFontSize(12);
+    doc.setFont('helvetica', 'normal');
+    doc.text(monthLabel.charAt(0).toUpperCase() + monthLabel.slice(1), 105, 28, { align: 'center' });
+    
+    // Summary section
+    doc.setFontSize(14);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Resumo Geral', 14, 45);
+    
+    doc.setFontSize(11);
+    doc.setFont('helvetica', 'normal');
+    doc.text(`Receita Total: ${formatCurrency(totalRevenue)}`, 14, 55);
+    doc.text(`Consultas Realizadas: ${totalAppointments}`, 14, 62);
+    doc.text(`Profissionais Ativos: ${professionals.length}`, 14, 69);
+    doc.text(`Variação vs mês anterior: ${revenueVariation >= 0 ? '+' : ''}${revenueVariation.toFixed(1)}%`, 14, 76);
+    
+    // Table header
+    doc.setFontSize(14);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Detalhamento por Profissional', 14, 95);
+    
+    // Table
+    const tableStartY = 105;
+    const colWidths = [60, 35, 30, 35, 30];
+    const headers = ['Profissional', 'Faturamento', 'Consultas', 'Ticket Médio', 'Meta'];
+    
+    // Draw header
+    doc.setFillColor(240, 240, 240);
+    doc.rect(14, tableStartY - 6, 182, 10, 'F');
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'bold');
+    
+    let xPos = 14;
+    headers.forEach((header, i) => {
+      doc.text(header, xPos + 2, tableStartY);
+      xPos += colWidths[i];
+    });
+    
+    // Draw rows
+    doc.setFont('helvetica', 'normal');
+    let yPos = tableStartY + 10;
+    
+    earnings.forEach((earning, index) => {
+      if (yPos > 270) {
+        doc.addPage();
+        yPos = 20;
+      }
+      
+      // Alternate row background
+      if (index % 2 === 0) {
+        doc.setFillColor(250, 250, 250);
+        doc.rect(14, yPos - 5, 182, 8, 'F');
+      }
+      
+      xPos = 14;
+      const row = [
+        earning.professional.name.substring(0, 25),
+        formatCurrency(earning.totalEarnings),
+        earning.appointmentCount.toString(),
+        formatCurrency(earning.averageTicket),
+        earning.goalAmount ? formatCurrency(earning.goalAmount) : '-'
+      ];
+      
+      row.forEach((cell, i) => {
+        doc.text(cell, xPos + 2, yPos);
+        xPos += colWidths[i];
+      });
+      
+      // Goal status indicator
+      if (earning.goalAmount && earning.totalEarnings >= earning.goalAmount) {
+        doc.setTextColor(34, 197, 94);
+        doc.text('✓', xPos - 5, yPos);
+        doc.setTextColor(0, 0, 0);
+      }
+      
+      yPos += 8;
+    });
+    
+    // Footer
+    doc.setFontSize(8);
+    doc.setTextColor(128, 128, 128);
+    doc.text(`Gerado em ${format(new Date(), "dd/MM/yyyy 'às' HH:mm")}`, 14, 285);
+    
+    // Save
+    doc.save(`relatorio-financeiro-${selectedMonth}.pdf`);
+    toast.success('Relatório exportado com sucesso!');
+  };
+
   const filteredProfessionals = professionals.filter(p => selectedProfessionals.includes(p.id));
 
   return (
@@ -453,6 +552,15 @@ export default function AdminFinanceiro() {
           </div>
 
           <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={exportToPDF}
+              className="gap-2"
+            >
+              <FileDown className="h-4 w-4" />
+              Exportar PDF
+            </Button>
             <Filter className="h-4 w-4 text-clinic-text-muted" />
             <Select value={selectedMonth} onValueChange={setSelectedMonth}>
               <SelectTrigger className="w-[180px]">
