@@ -50,7 +50,9 @@ import {
   X,
   Bell,
   MessageCircle,
+  AlertTriangle,
 } from 'lucide-react';
+import { DelinquencyDashboard } from '@/components/admin/DelinquencyDashboard';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import { supabase } from '@/integrations/supabase/client';
@@ -162,6 +164,7 @@ export default function AdminPayments() {
   const [reportData, setReportData] = useState<Payment[]>([]);
   const [loadingReport, setLoadingReport] = useState(false);
   const [sendingReminders, setSendingReminders] = useState(false);
+  const [isDelinquencyOpen, setIsDelinquencyOpen] = useState(false);
 
   useEffect(() => {
     fetchData();
@@ -676,6 +679,10 @@ export default function AdminPayments() {
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
+            <Button variant="outline" onClick={() => setIsDelinquencyOpen(true)} className="text-destructive border-destructive/30 hover:bg-destructive/10">
+              <AlertTriangle className="h-4 w-4 mr-2" />
+              Inadimplência
+            </Button>
             <Button variant="outline" onClick={handleSendReminders} disabled={sendingReminders}>
               <Bell className="h-4 w-4 mr-2" />
               {sendingReminders ? 'Enviando...' : 'Enviar Lembretes'}
@@ -1295,6 +1302,12 @@ export default function AdminPayments() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Delinquency Dashboard */}
+      <DelinquencyDashboard 
+        isOpen={isDelinquencyOpen} 
+        onClose={() => setIsDelinquencyOpen(false)} 
+      />
     </AdminLayout>
   );
 }
