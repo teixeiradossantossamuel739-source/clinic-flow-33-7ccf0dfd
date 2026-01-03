@@ -2,10 +2,13 @@ import { useState, useEffect } from 'react';
 import { AdminLayout } from '@/components/layout/AdminLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { supabase } from '@/integrations/supabase/client';
-import { DollarSign, TrendingUp, Users, Calendar, Filter, UserCheck, ArrowUp, ArrowDown, Minus, Target, Pencil, FileDown, PieChart } from 'lucide-react';
+import { DollarSign, TrendingUp, Users, Calendar, Filter, UserCheck, ArrowUp, ArrowDown, Minus, Target, Pencil, FileDown, PieChart, CalendarRange } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { format, startOfMonth, endOfMonth, subMonths } from 'date-fns';
+import { format, startOfMonth, endOfMonth, subMonths, parseISO } from 'date-fns';
+import { Calendar as CalendarComponent } from '@/components/ui/calendar';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { cn } from '@/lib/utils';
 import { ptBR } from 'date-fns/locale';
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine, Cell, PieChart as RechartsPieChart, Pie } from 'recharts';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
@@ -71,6 +74,9 @@ export default function AdminFinanceiro() {
   const [goalsDialogOpen, setGoalsDialogOpen] = useState(false);
   const [goalInputs, setGoalInputs] = useState<Record<string, string>>({});
   const [savingGoals, setSavingGoals] = useState(false);
+  const [filterMode, setFilterMode] = useState<'month' | 'custom'>('month');
+  const [customStartDate, setCustomStartDate] = useState<Date | undefined>(startOfMonth(new Date()));
+  const [customEndDate, setCustomEndDate] = useState<Date | undefined>(endOfMonth(new Date()));
 
   const checkGoalAchievement = async (professionalId: string, professionalName: string, currentEarnings: number, goalAmount: number, year: number, month: number) => {
     const monthName = format(new Date(year, month - 1), 'MMMM yyyy', { locale: ptBR });
@@ -132,15 +138,25 @@ export default function AdminFinanceiro() {
   useEffect(() => {
     fetchData();
     fetchMonthlyEvolution();
-  }, [selectedMonth]);
+  }, [selectedMonth, filterMode, customStartDate, customEndDate]);
+
+  const getDateRange = () => {
+    if (filterMode === 'custom' && customStartDate && customEndDate) {
+      return { startDate: customStartDate, endDate: customEndDate };
+    }
+    const [year, month] = selectedMonth.split('-').map(Number);
+    return {
+      startDate: startOfMonth(new Date(year, month - 1)),
+      endDate: endOfMonth(new Date(year, month - 1)),
+    };
+  };
 
   const fetchData = async () => {
     setLoading(true);
     try {
-      // Parse month
-      const [year, month] = selectedMonth.split('-').map(Number);
-      const startDate = startOfMonth(new Date(year, month - 1));
-      const endDate = endOfMonth(new Date(year, month - 1));
+      const { startDate, endDate } = getDateRange();
+      const year = startDate.getFullYear();
+      const month = startDate.getMonth() + 1;
 
       // Fetch professionals
       const { data: profData } = await supabase
@@ -159,7 +175,7 @@ export default function AdminFinanceiro() {
         setSelectedProfessionals(profData.map(p => p.id));
       }
 
-      // Fetch goals for the selected month
+      // Fetch goals for the selected month (only for month mode)
       const { data: goalsData } = await supabase
         .from('professional_goals')
         .select('id, professional_id, goal_amount_cents')
@@ -171,7 +187,7 @@ export default function AdminFinanceiro() {
         goalsMap.set(goal.professional_id, { amount: goal.goal_amount_cents, id: goal.id });
       });
 
-      // Fetch completed appointments in the month
+      // Fetch completed appointments in the period
       const { data: appointments } = await supabase
         .from('appointments')
         .select('professional_uuid, amount_cents, status, payment_status')
@@ -180,10 +196,12 @@ export default function AdminFinanceiro() {
         .eq('status', 'completed')
         .eq('payment_status', 'paid');
 
-      // Fetch previous month data for comparison
-      const prevMonthDate = subMonths(new Date(year, month - 1), 1);
-      const prevStartDate = startOfMonth(prevMonthDate);
-      const prevEndDate = endOfMonth(prevMonthDate);
+      // Fetch previous period data for comparison
+      const daysDiff = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+      const prevEndDate = new Date(startDate);
+      prevEndDate.setDate(prevEndDate.getDate() - 1);
+      const prevStartDate = new Date(prevEndDate);
+      prevStartDate.setDate(prevStartDate.getDate() - daysDiff + 1);
 
       const { data: prevAppointments } = await supabase
         .from('appointments')
@@ -492,8 +510,16 @@ export default function AdminFinanceiro() {
 
   const exportToPDF = () => {
     const doc = new jsPDF();
-    const [year, month] = selectedMonth.split('-').map(Number);
-    const monthLabel = format(new Date(year, month - 1), 'MMMM yyyy', { locale: ptBR });
+    const { startDate, endDate } = getDateRange();
+    
+    let periodLabel: string;
+    if (filterMode === 'custom' && customStartDate && customEndDate) {
+      periodLabel = `${format(customStartDate, 'dd/MM/yyyy')} a ${format(customEndDate, 'dd/MM/yyyy')}`;
+    } else {
+      const [year, month] = selectedMonth.split('-').map(Number);
+      periodLabel = format(new Date(year, month - 1), 'MMMM yyyy', { locale: ptBR });
+      periodLabel = periodLabel.charAt(0).toUpperCase() + periodLabel.slice(1);
+    }
     
     // Title
     doc.setFontSize(20);
@@ -502,7 +528,7 @@ export default function AdminFinanceiro() {
     
     doc.setFontSize(12);
     doc.setFont('helvetica', 'normal');
-    doc.text(monthLabel.charAt(0).toUpperCase() + monthLabel.slice(1), 105, 28, { align: 'center' });
+    doc.text(periodLabel, 105, 28, { align: 'center' });
     
     // Summary section
     doc.setFontSize(14);
@@ -514,7 +540,7 @@ export default function AdminFinanceiro() {
     doc.text(`Receita Total: ${formatCurrency(totalRevenue)}`, 14, 55);
     doc.text(`Consultas Realizadas: ${totalAppointments}`, 14, 62);
     doc.text(`Profissionais Ativos: ${professionals.length}`, 14, 69);
-    doc.text(`Variação vs mês anterior: ${revenueVariation >= 0 ? '+' : ''}${revenueVariation.toFixed(1)}%`, 14, 76);
+    doc.text(`Variação vs período anterior: ${revenueVariation >= 0 ? '+' : ''}${revenueVariation.toFixed(1)}%`, 14, 76);
     
     // Evolution Chart Section
     doc.setFontSize(14);
@@ -773,8 +799,11 @@ export default function AdminFinanceiro() {
     doc.setTextColor(128, 128, 128);
     doc.text(`Gerado em ${format(new Date(), "dd/MM/yyyy 'às' HH:mm")}`, 14, 285);
     
-    // Save
-    doc.save(`relatorio-financeiro-${selectedMonth}.pdf`);
+    // Save with appropriate filename
+    const filename = filterMode === 'custom' && customStartDate && customEndDate
+      ? `relatorio-financeiro-${format(customStartDate, 'yyyyMMdd')}-${format(customEndDate, 'yyyyMMdd')}.pdf`
+      : `relatorio-financeiro-${selectedMonth}.pdf`;
+    doc.save(filename);
     toast.success('Relatório exportado com sucesso!');
   };
 
@@ -820,18 +849,84 @@ export default function AdminFinanceiro() {
                 ))}
               </SelectContent>
             </Select>
-            <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-              <SelectTrigger className="w-[180px]">
+            
+            {/* Filter Mode Toggle */}
+            <Select value={filterMode} onValueChange={(value: 'month' | 'custom') => setFilterMode(value)}>
+              <SelectTrigger className="w-[140px]">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {monthOptions.map((opt) => (
-                  <SelectItem key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </SelectItem>
-                ))}
+                <SelectItem value="month">Por Mês</SelectItem>
+                <SelectItem value="custom">Período</SelectItem>
               </SelectContent>
             </Select>
+            
+            {filterMode === 'month' ? (
+              <Select value={selectedMonth} onValueChange={setSelectedMonth}>
+                <SelectTrigger className="w-[180px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {monthOptions.map((opt) => (
+                    <SelectItem key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : (
+              <div className="flex items-center gap-2">
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className={cn(
+                        "w-[130px] justify-start text-left font-normal",
+                        !customStartDate && "text-muted-foreground"
+                      )}
+                    >
+                      <CalendarRange className="mr-2 h-4 w-4" />
+                      {customStartDate ? format(customStartDate, "dd/MM/yyyy") : "Início"}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <CalendarComponent
+                      mode="single"
+                      selected={customStartDate}
+                      onSelect={setCustomStartDate}
+                      initialFocus
+                      className={cn("p-3 pointer-events-auto")}
+                    />
+                  </PopoverContent>
+                </Popover>
+                <span className="text-muted-foreground">até</span>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className={cn(
+                        "w-[130px] justify-start text-left font-normal",
+                        !customEndDate && "text-muted-foreground"
+                      )}
+                    >
+                      <CalendarRange className="mr-2 h-4 w-4" />
+                      {customEndDate ? format(customEndDate, "dd/MM/yyyy") : "Fim"}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <CalendarComponent
+                      mode="single"
+                      selected={customEndDate}
+                      onSelect={setCustomEndDate}
+                      initialFocus
+                      className={cn("p-3 pointer-events-auto")}
+                    />
+                  </PopoverContent>
+                </Popover>
+              </div>
+            )}
           </div>
         </div>
 
