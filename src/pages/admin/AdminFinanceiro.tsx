@@ -7,7 +7,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { format, startOfMonth, endOfMonth, subMonths } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine, Cell } from 'recharts';
 
 interface Professional {
   id: string;
@@ -23,6 +23,7 @@ interface ProfessionalEarning {
   averageTicket: number;
   previousEarnings?: number;
   previousAppointments?: number;
+  goalAmount?: number;
 }
 
 interface MonthlyChartData {
@@ -75,6 +76,18 @@ export default function AdminFinanceiro() {
       if (selectedProfessionals.length === 0 && profData && profData.length > 0) {
         setSelectedProfessionals(profData.map(p => p.id));
       }
+
+      // Fetch goals for the selected month
+      const { data: goalsData } = await supabase
+        .from('professional_goals')
+        .select('professional_id, goal_amount_cents')
+        .eq('month', month)
+        .eq('year', year);
+
+      const goalsMap = new Map<string, number>();
+      (goalsData || []).forEach((goal) => {
+        goalsMap.set(goal.professional_id, goal.goal_amount_cents);
+      });
 
       // Fetch completed appointments in the month
       const { data: appointments } = await supabase
@@ -132,6 +145,7 @@ export default function AdminFinanceiro() {
       const earningsArray: ProfessionalEarning[] = (profData || []).map((prof) => {
         const data = earningsMap.get(prof.id) || { total: 0, count: 0 };
         const prevData = prevEarningsMap.get(prof.id) || { total: 0, count: 0 };
+        const goal = goalsMap.get(prof.id);
         return {
           professional: prof,
           totalEarnings: data.total,
@@ -139,6 +153,7 @@ export default function AdminFinanceiro() {
           averageTicket: data.count > 0 ? data.total / data.count : 0,
           previousEarnings: prevData.total,
           previousAppointments: prevData.count,
+          goalAmount: goal,
         };
       });
 
@@ -447,12 +462,12 @@ export default function AdminFinanceiro() {
           </CardContent>
         </Card>
 
-        {/* Comparison Bar Chart */}
+        {/* Comparison Bar Chart with Goals */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <TrendingUp className="h-5 w-5" />
-              Comparativo: Mês Atual vs Mês Anterior
+              Comparativo: Mês Atual vs Mês Anterior vs Meta
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -461,16 +476,18 @@ export default function AdminFinanceiro() {
                 Nenhum profissional encontrado
               </div>
             ) : (
-              <div className="h-[350px]">
+              <div className="h-[400px]">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart 
                     data={earnings.map(e => ({
                       name: e.professional.name.split(' ')[0],
                       'Mês Atual': e.totalEarnings / 100,
                       'Mês Anterior': (e.previousEarnings || 0) / 100,
+                      'Meta': e.goalAmount ? e.goalAmount / 100 : null,
+                      goalReached: e.goalAmount ? e.totalEarnings >= e.goalAmount : null,
                     }))}
                     layout="vertical"
-                    margin={{ left: 20, right: 20 }}
+                    margin={{ left: 20, right: 30 }}
                   >
                     <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                     <XAxis 
@@ -492,24 +509,56 @@ export default function AdminFinanceiro() {
                         border: '1px solid hsl(var(--border))',
                         borderRadius: '8px',
                       }}
-                      formatter={(value: number) => [`R$ ${value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`, '']}
+                      formatter={(value: number | null, name: string) => {
+                        if (value === null) return ['Não definida', name];
+                        return [`R$ ${value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`, name];
+                      }}
                     />
                     <Legend />
                     <Bar 
                       dataKey="Mês Atual" 
-                      fill="hsl(var(--primary))" 
                       radius={[0, 4, 4, 0]}
-                    />
+                    >
+                      {earnings.map((entry, index) => (
+                        <Cell 
+                          key={`cell-${index}`}
+                          fill={entry.goalAmount && entry.totalEarnings >= entry.goalAmount 
+                            ? 'hsl(142, 76%, 36%)' 
+                            : 'hsl(var(--primary))'
+                          }
+                        />
+                      ))}
+                    </Bar>
                     <Bar 
                       dataKey="Mês Anterior" 
                       fill="hsl(var(--muted-foreground))" 
                       radius={[0, 4, 4, 0]}
-                      opacity={0.6}
+                      opacity={0.5}
+                    />
+                    <Bar 
+                      dataKey="Meta" 
+                      fill="hsl(38, 92%, 50%)" 
+                      radius={[0, 4, 4, 0]}
+                      opacity={0.8}
                     />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
             )}
+            <div className="flex items-center justify-center gap-6 mt-4 text-sm">
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-3 rounded-full bg-primary" />
+                <span className="text-muted-foreground">Abaixo da meta</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-3 rounded-full" style={{ backgroundColor: 'hsl(142, 76%, 36%)' }} />
+                <span className="text-muted-foreground">Meta atingida</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-3 rounded-full" style={{ backgroundColor: 'hsl(38, 92%, 50%)' }} />
+                <span className="text-muted-foreground">Meta definida</span>
+              </div>
+            </div>
           </CardContent>
         </Card>
 
