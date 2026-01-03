@@ -128,6 +128,36 @@ export type Database = {
           },
         ]
       }
+      clinic_rooms: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          is_active: boolean
+          name: string
+          rental_value_cents: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          name: string
+          rental_value_cents?: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          name?: string
+          rental_value_cents?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       notifications: {
         Row: {
           appointment_id: string | null
@@ -255,6 +285,62 @@ export type Database = {
           },
         ]
       }
+      professional_payments: {
+        Row: {
+          amount_due_cents: number
+          amount_paid_cents: number
+          created_at: string
+          due_date: string | null
+          id: string
+          month: number
+          notes: string | null
+          paid_at: string | null
+          payment_type: string
+          professional_id: string
+          status: string
+          updated_at: string
+          year: number
+        }
+        Insert: {
+          amount_due_cents?: number
+          amount_paid_cents?: number
+          created_at?: string
+          due_date?: string | null
+          id?: string
+          month: number
+          notes?: string | null
+          paid_at?: string | null
+          payment_type?: string
+          professional_id: string
+          status?: string
+          updated_at?: string
+          year: number
+        }
+        Update: {
+          amount_due_cents?: number
+          amount_paid_cents?: number
+          created_at?: string
+          due_date?: string | null
+          id?: string
+          month?: number
+          notes?: string | null
+          paid_at?: string | null
+          payment_type?: string
+          professional_id?: string
+          status?: string
+          updated_at?: string
+          year?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "professional_payments_professional_id_fkey"
+            columns: ["professional_id"]
+            isOneToOne: false
+            referencedRelation: "professionals"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       professional_preferences: {
         Row: {
           created_at: string
@@ -359,13 +445,17 @@ export type Database = {
           created_at: string
           crm: string | null
           email: string
+          fixed_room_value_cents: number | null
           id: string
           is_active: boolean
           name: string
+          payment_percentage: number | null
+          payment_type: string
           phone: string | null
           profession: string
           rating: number | null
           review_count: number | null
+          room_id: string | null
           specialty_id: string
           updated_at: string
           user_id: string | null
@@ -376,13 +466,17 @@ export type Database = {
           created_at?: string
           crm?: string | null
           email: string
+          fixed_room_value_cents?: number | null
           id?: string
           is_active?: boolean
           name: string
+          payment_percentage?: number | null
+          payment_type?: string
           phone?: string | null
           profession?: string
           rating?: number | null
           review_count?: number | null
+          room_id?: string | null
           specialty_id: string
           updated_at?: string
           user_id?: string | null
@@ -393,18 +487,30 @@ export type Database = {
           created_at?: string
           crm?: string | null
           email?: string
+          fixed_room_value_cents?: number | null
           id?: string
           is_active?: boolean
           name?: string
+          payment_percentage?: number | null
+          payment_type?: string
           phone?: string | null
           profession?: string
           rating?: number | null
           review_count?: number | null
+          room_id?: string | null
           specialty_id?: string
           updated_at?: string
           user_id?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "professionals_room_id_fkey"
+            columns: ["room_id"]
+            isOneToOne: false
+            referencedRelation: "clinic_rooms"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       profiles: {
         Row: {

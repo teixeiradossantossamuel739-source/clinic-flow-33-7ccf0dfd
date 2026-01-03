@@ -25,6 +25,8 @@ import AdminReports from "./pages/admin/AdminReports";
 import AdminSettings from "./pages/admin/AdminSettings";
 import AdminProfessionals from "./pages/admin/AdminProfessionals";
 import AdminFinanceiro from "./pages/admin/AdminFinanceiro";
+import AdminPayments from "./pages/admin/AdminPayments";
+import AdminRooms from "./pages/admin/AdminRooms";
 import ProfessionalDashboard from "./pages/admin/ProfessionalDashboard";
 import FuncionarioDashboard from "./pages/funcionario/FuncionarioDashboard";
 import FuncionarioAgenda from "./pages/funcionario/FuncionarioAgenda";
@@ -140,18 +142,18 @@ const App = () => (
               }
             />
             <Route
-              path="/admin/relatorios"
+              path="/admin/pagamentos"
               element={
                 <ProtectedRoute allowedRoles={['admin']}>
-                  <AdminReports />
+                  <AdminPayments />
                 </ProtectedRoute>
               }
             />
             <Route
-              path="/admin/configuracoes"
+              path="/admin/salas"
               element={
                 <ProtectedRoute allowedRoles={['admin']}>
-                  <AdminSettings />
+                  <AdminRooms />
                 </ProtectedRoute>
               }
             />
