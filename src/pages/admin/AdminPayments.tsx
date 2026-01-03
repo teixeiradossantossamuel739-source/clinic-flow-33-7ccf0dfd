@@ -44,7 +44,13 @@ import {
   Search,
   History,
   User,
+  FileSpreadsheet,
+  FileText,
+  Filter,
+  X,
 } from 'lucide-react';
+import * as XLSX from 'xlsx';
+import jsPDF from 'jspdf';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { format, parse } from 'date-fns';
@@ -143,6 +149,16 @@ export default function AdminPayments() {
   const [selectedPaymentForHistory, setSelectedPaymentForHistory] = useState<Payment | null>(null);
   const [paymentHistory, setPaymentHistory] = useState<PaymentHistory[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
+
+  // Report state
+  const [isReportDialogOpen, setIsReportDialogOpen] = useState(false);
+  const [reportStartMonth, setReportStartMonth] = useState(1);
+  const [reportStartYear, setReportStartYear] = useState(currentDate.getFullYear());
+  const [reportEndMonth, setReportEndMonth] = useState(currentDate.getMonth() + 1);
+  const [reportEndYear, setReportEndYear] = useState(currentDate.getFullYear());
+  const [reportProfessionalId, setReportProfessionalId] = useState<string>('all');
+  const [reportData, setReportData] = useState<Payment[]>([]);
+  const [loadingReport, setLoadingReport] = useState(false);
 
   useEffect(() => {
     fetchData();
@@ -442,6 +458,176 @@ export default function AdminPayments() {
     return (cents / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
   };
 
+  const fetchReportData = async () => {
+    setLoadingReport(true);
+    try {
+      let query = supabase
+        .from('professional_payments')
+        .select('*')
+        .order('year', { ascending: true })
+        .order('month', { ascending: true });
+
+      // Filter by period
+      const startPeriod = reportStartYear * 100 + reportStartMonth;
+      const endPeriod = reportEndYear * 100 + reportEndMonth;
+
+      const { data, error } = await query;
+      if (error) throw error;
+
+      // Filter by period in JS (more flexible)
+      let filtered = (data || []).filter(p => {
+        const period = p.year * 100 + p.month;
+        return period >= startPeriod && period <= endPeriod;
+      });
+
+      // Filter by professional
+      if (reportProfessionalId !== 'all') {
+        filtered = filtered.filter(p => p.professional_id === reportProfessionalId);
+      }
+
+      const typedPayments = filtered.map(p => ({
+        ...p,
+        status: p.status as PaymentStatus
+      }));
+
+      setReportData(typedPayments);
+    } catch (error) {
+      console.error('Error fetching report:', error);
+      toast.error('Erro ao gerar relatório');
+    } finally {
+      setLoadingReport(false);
+    }
+  };
+
+  const handleOpenReport = () => {
+    setIsReportDialogOpen(true);
+    setReportData([]);
+  };
+
+  const handleGenerateReport = () => {
+    fetchReportData();
+  };
+
+  const reportWithProfessionals = useMemo(() => {
+    return reportData.map(payment => ({
+      ...payment,
+      professional: professionals.find(p => p.id === payment.professional_id),
+    }));
+  }, [reportData, professionals]);
+
+  const reportStats = useMemo(() => {
+    const totalDue = reportData.reduce((sum, p) => sum + p.amount_due_cents, 0);
+    const totalPaid = reportData.filter(p => p.status === 'paid').reduce((sum, p) => sum + p.amount_paid_cents, 0);
+    const paidCount = reportData.filter(p => p.status === 'paid').length;
+    const pendingCount = reportData.filter(p => p.status === 'pending').length;
+    return { totalDue, totalPaid, paidCount, pendingCount };
+  }, [reportData]);
+
+  const exportToExcel = () => {
+    if (reportWithProfessionals.length === 0) {
+      toast.error('Gere o relatório antes de exportar');
+      return;
+    }
+
+    const data = reportWithProfessionals.map(p => ({
+      'Profissional': p.professional?.name || 'Desconhecido',
+      'Mês/Ano': `${MONTHS.find(m => m.value === p.month)?.label}/${p.year}`,
+      'Tipo': p.payment_type === 'percentage' ? 'Percentual' : 'Sala Fixa',
+      'Valor Devido': formatCurrency(p.amount_due_cents),
+      'Valor Pago': formatCurrency(p.amount_paid_cents),
+      'Status': STATUS_CONFIG[p.status]?.label || p.status,
+      'Vencimento': p.due_date ? format(new Date(p.due_date), 'dd/MM/yyyy') : '-',
+      'Data Pagamento': p.paid_at ? format(new Date(p.paid_at), 'dd/MM/yyyy') : '-',
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Pagamentos');
+
+    const startPeriod = `${MONTHS.find(m => m.value === reportStartMonth)?.label}_${reportStartYear}`;
+    const endPeriod = `${MONTHS.find(m => m.value === reportEndMonth)?.label}_${reportEndYear}`;
+    XLSX.writeFile(wb, `relatorio_pagamentos_${startPeriod}_a_${endPeriod}.xlsx`);
+    toast.success('Relatório exportado para Excel!');
+  };
+
+  const exportToPDF = () => {
+    if (reportWithProfessionals.length === 0) {
+      toast.error('Gere o relatório antes de exportar');
+      return;
+    }
+
+    const doc = new jsPDF();
+    const pageWidth = doc.internal.pageSize.getWidth();
+
+    // Title
+    doc.setFontSize(18);
+    doc.text('Relatório de Pagamentos', pageWidth / 2, 20, { align: 'center' });
+
+    // Period
+    doc.setFontSize(12);
+    const periodText = `Período: ${MONTHS.find(m => m.value === reportStartMonth)?.label}/${reportStartYear} a ${MONTHS.find(m => m.value === reportEndMonth)?.label}/${reportEndYear}`;
+    doc.text(periodText, pageWidth / 2, 30, { align: 'center' });
+
+    if (reportProfessionalId !== 'all') {
+      const prof = professionals.find(p => p.id === reportProfessionalId);
+      doc.text(`Profissional: ${prof?.name || 'Todos'}`, pageWidth / 2, 38, { align: 'center' });
+    }
+
+    // Stats
+    doc.setFontSize(11);
+    let y = 50;
+    doc.text(`Total Esperado: ${formatCurrency(reportStats.totalDue)}`, 14, y);
+    doc.text(`Total Pago: ${formatCurrency(reportStats.totalPaid)}`, 14, y + 7);
+    doc.text(`Pagos: ${reportStats.paidCount} | Pendentes: ${reportStats.pendingCount}`, 14, y + 14);
+
+    // Table header
+    y = 75;
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'bold');
+    const cols = ['Profissional', 'Mês/Ano', 'Tipo', 'Valor', 'Status'];
+    const colWidths = [50, 30, 30, 35, 25];
+    let x = 14;
+    cols.forEach((col, i) => {
+      doc.text(col, x, y);
+      x += colWidths[i];
+    });
+
+    // Table data
+    doc.setFont('helvetica', 'normal');
+    y += 7;
+
+    reportWithProfessionals.forEach((p) => {
+      if (y > 280) {
+        doc.addPage();
+        y = 20;
+      }
+
+      x = 14;
+      const row = [
+        (p.professional?.name || 'Desconhecido').substring(0, 20),
+        `${MONTHS.find(m => m.value === p.month)?.label?.substring(0, 3)}/${p.year}`,
+        p.payment_type === 'percentage' ? 'Percent.' : 'Sala Fixa',
+        formatCurrency(p.amount_due_cents),
+        STATUS_CONFIG[p.status]?.label || p.status,
+      ];
+
+      row.forEach((cell, i) => {
+        doc.text(cell, x, y);
+        x += colWidths[i];
+      });
+      y += 6;
+    });
+
+    // Footer
+    doc.setFontSize(8);
+    doc.text(`Gerado em: ${format(new Date(), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}`, 14, 290);
+
+    const startPeriod = `${MONTHS.find(m => m.value === reportStartMonth)?.label}_${reportStartYear}`;
+    const endPeriod = `${MONTHS.find(m => m.value === reportEndMonth)?.label}_${reportEndYear}`;
+    doc.save(`relatorio_pagamentos_${startPeriod}_a_${endPeriod}.pdf`);
+    toast.success('Relatório exportado para PDF!');
+  };
+
   return (
     <AdminLayout>
       <div className="space-y-6">
@@ -453,10 +639,16 @@ export default function AdminPayments() {
               Controle de pagamentos dos funcionários
             </p>
           </div>
-          <Button onClick={() => handleOpenPaymentDialog()}>
-            <Plus className="h-4 w-4 mr-2" />
-            Novo Pagamento
-          </Button>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={handleOpenReport}>
+              <FileText className="h-4 w-4 mr-2" />
+              Relatório
+            </Button>
+            <Button onClick={() => handleOpenPaymentDialog()}>
+              <Plus className="h-4 w-4 mr-2" />
+              Novo Pagamento
+            </Button>
+          </div>
         </div>
 
         {/* Filters */}
@@ -882,6 +1074,182 @@ export default function AdminPayments() {
 
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsHistoryDialogOpen(false)}>
+              Fechar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Report Dialog */}
+      <Dialog open={isReportDialogOpen} onOpenChange={setIsReportDialogOpen}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FileText className="h-5 w-5" />
+              Relatório de Pagamentos
+            </DialogTitle>
+          </DialogHeader>
+          
+          {/* Filters */}
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-3 p-4 bg-muted rounded-lg">
+            <div>
+              <Label className="text-xs">Mês Início</Label>
+              <Select value={String(reportStartMonth)} onValueChange={(v) => setReportStartMonth(Number(v))}>
+                <SelectTrigger className="h-9">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {MONTHS.map(m => (
+                    <SelectItem key={m.value} value={String(m.value)}>{m.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label className="text-xs">Ano Início</Label>
+              <Select value={String(reportStartYear)} onValueChange={(v) => setReportStartYear(Number(v))}>
+                <SelectTrigger className="h-9">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {[2024, 2025, 2026].map(y => (
+                    <SelectItem key={y} value={String(y)}>{y}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label className="text-xs">Mês Fim</Label>
+              <Select value={String(reportEndMonth)} onValueChange={(v) => setReportEndMonth(Number(v))}>
+                <SelectTrigger className="h-9">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {MONTHS.map(m => (
+                    <SelectItem key={m.value} value={String(m.value)}>{m.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label className="text-xs">Ano Fim</Label>
+              <Select value={String(reportEndYear)} onValueChange={(v) => setReportEndYear(Number(v))}>
+                <SelectTrigger className="h-9">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {[2024, 2025, 2026].map(y => (
+                    <SelectItem key={y} value={String(y)}>{y}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label className="text-xs">Profissional</Label>
+              <Select value={reportProfessionalId} onValueChange={setReportProfessionalId}>
+                <SelectTrigger className="h-9">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos</SelectItem>
+                  {professionals.map(p => (
+                    <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <div className="flex gap-2 justify-center">
+            <Button onClick={handleGenerateReport} disabled={loadingReport}>
+              <Filter className="h-4 w-4 mr-2" />
+              {loadingReport ? 'Gerando...' : 'Gerar Relatório'}
+            </Button>
+          </div>
+
+          {/* Stats */}
+          {reportData.length > 0 && (
+            <div className="grid grid-cols-4 gap-3">
+              <Card className="p-3 text-center">
+                <p className="text-lg font-bold">{formatCurrency(reportStats.totalDue)}</p>
+                <p className="text-xs text-muted-foreground">Total Esperado</p>
+              </Card>
+              <Card className="p-3 text-center">
+                <p className="text-lg font-bold text-green-600">{formatCurrency(reportStats.totalPaid)}</p>
+                <p className="text-xs text-muted-foreground">Total Pago</p>
+              </Card>
+              <Card className="p-3 text-center">
+                <p className="text-lg font-bold">{reportStats.paidCount}</p>
+                <p className="text-xs text-muted-foreground">Pagos</p>
+              </Card>
+              <Card className="p-3 text-center">
+                <p className="text-lg font-bold text-yellow-600">{reportStats.pendingCount}</p>
+                <p className="text-xs text-muted-foreground">Pendentes</p>
+              </Card>
+            </div>
+          )}
+
+          {/* Report Table */}
+          <ScrollArea className="flex-1 max-h-[300px]">
+            {loadingReport ? (
+              <div className="text-center py-8 text-muted-foreground">
+                Carregando...
+              </div>
+            ) : reportData.length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground">
+                Clique em "Gerar Relatório" para visualizar os dados
+              </div>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Profissional</TableHead>
+                    <TableHead>Mês/Ano</TableHead>
+                    <TableHead>Tipo</TableHead>
+                    <TableHead>Valor Devido</TableHead>
+                    <TableHead>Valor Pago</TableHead>
+                    <TableHead>Status</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {reportWithProfessionals.map((p) => {
+                    const statusConfig = STATUS_CONFIG[p.status];
+                    return (
+                      <TableRow key={p.id}>
+                        <TableCell className="font-medium">{p.professional?.name || 'Desconhecido'}</TableCell>
+                        <TableCell>{MONTHS.find(m => m.value === p.month)?.label}/{p.year}</TableCell>
+                        <TableCell>{p.payment_type === 'percentage' ? 'Percentual' : 'Sala Fixa'}</TableCell>
+                        <TableCell>{formatCurrency(p.amount_due_cents)}</TableCell>
+                        <TableCell>{formatCurrency(p.amount_paid_cents)}</TableCell>
+                        <TableCell>
+                          <Badge className={cn(statusConfig.bgColor, statusConfig.textColor, 'border-0')}>
+                            {statusConfig.label}
+                          </Badge>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            )}
+          </ScrollArea>
+
+          <DialogFooter className="flex-row justify-between sm:justify-between">
+            <div className="flex gap-2">
+              {reportData.length > 0 && (
+                <>
+                  <Button variant="outline" size="sm" onClick={exportToExcel}>
+                    <FileSpreadsheet className="h-4 w-4 mr-2" />
+                    Excel
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={exportToPDF}>
+                    <FileText className="h-4 w-4 mr-2" />
+                    PDF
+                  </Button>
+                </>
+              )}
+            </div>
+            <Button variant="outline" onClick={() => setIsReportDialogOpen(false)}>
               Fechar
             </Button>
           </DialogFooter>
