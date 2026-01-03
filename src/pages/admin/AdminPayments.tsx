@@ -48,6 +48,8 @@ import {
   FileText,
   Filter,
   X,
+  Bell,
+  MessageCircle,
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
@@ -159,6 +161,7 @@ export default function AdminPayments() {
   const [reportProfessionalId, setReportProfessionalId] = useState<string>('all');
   const [reportData, setReportData] = useState<Payment[]>([]);
   const [loadingReport, setLoadingReport] = useState(false);
+  const [sendingReminders, setSendingReminders] = useState(false);
 
   useEffect(() => {
     fetchData();
@@ -628,6 +631,39 @@ export default function AdminPayments() {
     toast.success('Relatório exportado para PDF!');
   };
 
+  const handleSendReminders = async () => {
+    setSendingReminders(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('payment-reminders', {
+        body: {}
+      });
+
+      if (error) throw error;
+
+      if (data?.results && data.results.length > 0) {
+        const successful = data.results.filter((r: any) => r.success);
+        if (successful.length > 0) {
+          // Open WhatsApp links for each professional
+          successful.forEach((result: any, index: number) => {
+            setTimeout(() => {
+              window.open(result.whatsappLink, '_blank');
+            }, index * 500); // Stagger opening to avoid popup blockers
+          });
+          toast.success(`${successful.length} lembretes gerados! Clique nos links para enviar.`);
+        } else {
+          toast.info('Nenhum pagamento próximo do vencimento encontrado.');
+        }
+      } else {
+        toast.info(data?.message || 'Nenhum lembrete para enviar.');
+      }
+    } catch (error: any) {
+      console.error('Error sending reminders:', error);
+      toast.error('Erro ao enviar lembretes');
+    } finally {
+      setSendingReminders(false);
+    }
+  };
+
   return (
     <AdminLayout>
       <div className="space-y-6">
@@ -639,7 +675,11 @@ export default function AdminPayments() {
               Controle de pagamentos dos funcionários
             </p>
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" onClick={handleSendReminders} disabled={sendingReminders}>
+              <Bell className="h-4 w-4 mr-2" />
+              {sendingReminders ? 'Enviando...' : 'Enviar Lembretes'}
+            </Button>
             <Button variant="outline" onClick={handleOpenReport}>
               <FileText className="h-4 w-4 mr-2" />
               Relatório
