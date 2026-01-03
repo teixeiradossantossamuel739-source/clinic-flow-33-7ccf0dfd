@@ -19,14 +19,9 @@ import {
   ChevronRight,
   FileText,
   Ban,
-  Unlock,
-  List,
-  CalendarDays,
-  CheckCircle2,
-  XCircle,
-  MessageSquare
+  Unlock
 } from 'lucide-react';
-import { format, addDays, isSameDay, isToday } from 'date-fns';
+import { format, addDays, startOfWeek, isSameDay } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { parseLocalDate } from '@/lib/dateUtils';
 import { toast } from 'sonner';
@@ -71,35 +66,38 @@ interface BlockedTime {
   reason: string | null;
 }
 
-// Simplified status for staff view
-type SimpleSlotStatus = 'available' | 'pending' | 'occupied' | 'blocked';
+type SlotStatus = 'available' | 'pending' | 'awaiting_payment' | 'confirmed' | 'completed' | 'cancelled' | 'unavailable' | 'blocked';
 
-const SIMPLE_STATUS_COLORS: Record<SimpleSlotStatus, string> = {
+const STATUS_COLORS: Record<SlotStatus, string> = {
   available: 'bg-emerald-500 hover:bg-emerald-600',
   pending: 'bg-amber-400 hover:bg-amber-500',
-  occupied: 'bg-red-500 hover:bg-red-600',
+  awaiting_payment: 'bg-orange-500 hover:bg-orange-600 animate-pulse',
+  confirmed: 'bg-red-500 hover:bg-red-600',
+  completed: 'bg-muted hover:bg-muted/80',
+  cancelled: 'bg-transparent border border-dashed border-muted-foreground/30',
+  unavailable: 'bg-transparent',
   blocked: 'bg-slate-600 hover:bg-slate-700',
 };
 
-const SIMPLE_STATUS_LABELS: Record<SimpleSlotStatus, string> = {
-  available: 'Livre',
-  pending: 'Solicitação Pendente',
-  occupied: 'Ocupado',
-  blocked: 'Bloqueado',
+const STATUS_LABELS: Record<SlotStatus, string> = {
+  available: 'Disponível',
+  pending: 'Aguardando',
+  awaiting_payment: '💰 Conferir Pagamento',
+  confirmed: 'Confirmado',
+  completed: 'Realizado',
+  cancelled: 'Cancelado',
+  unavailable: '',
+  blocked: '🚫 Bloqueado',
 };
-
-type ViewMode = 'requests' | 'daily';
 
 export default function FuncionarioAgenda() {
   const { user } = useAuth();
   const [professionalId, setProfessionalId] = useState<string | null>(null);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
-  const [allPendingAppointments, setAllPendingAppointments] = useState<Appointment[]>([]);
   const [schedules, setSchedules] = useState<Schedule[]>([]);
   const [blockedTimes, setBlockedTimes] = useState<BlockedTime[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedDate, setSelectedDate] = useState(() => new Date());
-  const [viewMode, setViewMode] = useState<ViewMode>('requests');
+  const [weekStart, setWeekStart] = useState(() => startOfWeek(new Date(), { weekStartsOn: 1 }));
   const [selectedSlot, setSelectedSlot] = useState<{ date: Date; time: string; appointment?: Appointment; blockedTime?: BlockedTime } | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   
@@ -109,35 +107,38 @@ export default function FuncionarioAgenda() {
   const [blockFullDay, setBlockFullDay] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  // Generate time slots for selected day
-  const timeSlots = useMemo(() => {
-    const dayOfWeek = selectedDate.getDay();
-    const schedule = schedules.find(s => s.day_of_week === dayOfWeek && s.is_active);
-    
-    if (!schedule) return [];
+  const weekDays = useMemo(() => {
+    return Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
+  }, [weekStart]);
 
+  const timeSlots = useMemo(() => {
     const slots: string[] = [];
-    const [startHour, startMin] = schedule.start_time.split(':').map(Number);
-    const [endHour, endMin] = schedule.end_time.split(':').map(Number);
+    let earliest = '23:59';
+    let latest = '00:00';
+
+    schedules.filter(s => s.is_active).forEach(schedule => {
+      if (schedule.start_time < earliest) earliest = schedule.start_time;
+      if (schedule.end_time > latest) latest = schedule.end_time;
+    });
+
+    if (earliest === '23:59') {
+      earliest = '08:00';
+      latest = '18:00';
+    }
+
+    const [startHour, startMin] = earliest.split(':').map(Number);
+    const [endHour, endMin] = latest.split(':').map(Number);
     const startMinutes = startHour * 60 + startMin;
     const endMinutes = endHour * 60 + endMin;
 
-    for (let m = startMinutes; m < endMinutes; m += schedule.slot_duration_minutes || 30) {
+    for (let m = startMinutes; m < endMinutes; m += 30) {
       const h = Math.floor(m / 60);
       const min = m % 60;
       slots.push(`${String(h).padStart(2, '0')}:${String(min).padStart(2, '0')}`);
     }
 
     return slots;
-  }, [schedules, selectedDate]);
-
-  // Daily appointments for selected date
-  const dailyAppointments = useMemo(() => {
-    return appointments.filter(apt => {
-      const aptDate = parseLocalDate(apt.appointment_date);
-      return isSameDay(aptDate, selectedDate);
-    });
-  }, [appointments, selectedDate]);
+  }, [schedules]);
 
   useEffect(() => {
     if (user) {
@@ -147,10 +148,10 @@ export default function FuncionarioAgenda() {
 
   useEffect(() => {
     if (professionalId) {
-      fetchAllPendingAppointments();
-      fetchDailyData();
+      fetchAppointments();
+      fetchBlockedTimes();
     }
-  }, [professionalId, selectedDate]);
+  }, [professionalId, weekStart]);
 
   async function fetchProfessionalData() {
     try {
@@ -179,59 +180,15 @@ export default function FuncionarioAgenda() {
     }
   }
 
-  async function fetchAllPendingAppointments() {
-    if (!professionalId) return;
-
-    try {
-      const { data, error } = await supabase
-        .from('appointments')
-        .select(`
-          id,
-          patient_name,
-          patient_email,
-          patient_phone,
-          appointment_date,
-          appointment_time,
-          status,
-          payment_status,
-          amount_cents,
-          notes,
-          service_id,
-          services:service_id (
-            name,
-            duration_minutes
-          )
-        `)
-        .eq('professional_uuid', professionalId)
-        .in('status', ['pending'])
-        .gte('appointment_date', format(new Date(), 'yyyy-MM-dd'))
-        .order('appointment_date', { ascending: true })
-        .order('appointment_time', { ascending: true });
-
-      if (error) throw error;
-
-      const formattedData = (data || []).map(apt => ({
-        ...apt,
-        service: apt.services ? {
-          name: (apt.services as any).name,
-          duration_minutes: (apt.services as any).duration_minutes
-        } : undefined
-      }));
-
-      setAllPendingAppointments(formattedData);
-    } catch (error) {
-      console.error('Error fetching pending appointments:', error);
-    }
-  }
-
-  async function fetchDailyData() {
+  async function fetchAppointments() {
     if (!professionalId) return;
 
     setLoading(true);
     try {
-      const dateStr = format(selectedDate, 'yyyy-MM-dd');
+      const weekEnd = addDays(weekStart, 6);
+      const startDate = format(weekStart, 'yyyy-MM-dd');
+      const endDate = format(weekEnd, 'yyyy-MM-dd');
 
-      // Fetch appointments for selected date
       const { data, error } = await supabase
         .from('appointments')
         .select(`
@@ -252,7 +209,8 @@ export default function FuncionarioAgenda() {
           )
         `)
         .eq('professional_uuid', professionalId)
-        .eq('appointment_date', dateStr)
+        .gte('appointment_date', startDate)
+        .lte('appointment_date', endDate)
         .neq('status', 'cancelled');
 
       if (error) throw error;
@@ -266,66 +224,104 @@ export default function FuncionarioAgenda() {
       }));
 
       setAppointments(formattedData);
-
-      // Fetch blocked times for selected date
-      const { data: blockedData, error: blockedError } = await supabase
-        .from('professional_blocked_times')
-        .select('*')
-        .eq('professional_id', professionalId)
-        .eq('block_date', dateStr);
-
-      if (blockedError) throw blockedError;
-      setBlockedTimes(blockedData || []);
-
     } catch (error) {
-      console.error('Error fetching daily data:', error);
-      toast.error('Erro ao carregar dados do dia');
+      console.error('Error fetching appointments:', error);
+      toast.error('Erro ao carregar agendamentos');
     } finally {
       setLoading(false);
     }
   }
 
-  function getBlockedTimeForSlot(time: string): BlockedTime | undefined {
+  async function fetchBlockedTimes() {
+    if (!professionalId) return;
+
+    try {
+      const weekEnd = addDays(weekStart, 6);
+      const startDate = format(weekStart, 'yyyy-MM-dd');
+      const endDate = format(weekEnd, 'yyyy-MM-dd');
+
+      const { data, error } = await supabase
+        .from('professional_blocked_times')
+        .select('*')
+        .eq('professional_id', professionalId)
+        .gte('block_date', startDate)
+        .lte('block_date', endDate);
+
+      if (error) throw error;
+      setBlockedTimes(data || []);
+    } catch (error) {
+      console.error('Error fetching blocked times:', error);
+    }
+  }
+
+  function getBlockedTimeForSlot(date: Date, time: string): BlockedTime | undefined {
+    const dateStr = format(date, 'yyyy-MM-dd');
     return blockedTimes.find(bt => {
+      if (bt.block_date !== dateStr) return false;
       // Full day block
       if (!bt.start_time && !bt.end_time) return true;
       // Specific time block
+      const slotTime = time;
       const blockStart = bt.start_time?.substring(0, 5) || '00:00';
       const blockEnd = bt.end_time?.substring(0, 5) || '23:59';
-      return time >= blockStart && time < blockEnd;
+      return slotTime >= blockStart && slotTime < blockEnd;
     });
   }
 
-  function getSimpleSlotStatus(time: string): SimpleSlotStatus {
+  function getSlotStatus(date: Date, time: string): SlotStatus {
+    const dayOfWeek = date.getDay();
+    const schedule = schedules.find(s => s.day_of_week === dayOfWeek && s.is_active);
+    
+    if (!schedule) return 'unavailable';
+    
+    const timeValue = time.replace(':', '');
+    const startValue = schedule.start_time.substring(0, 5).replace(':', '');
+    const endValue = schedule.end_time.substring(0, 5).replace(':', '');
+    
+    if (timeValue < startValue || timeValue >= endValue) return 'unavailable';
+
     // Check blocked times
-    const blockedTime = getBlockedTimeForSlot(time);
+    const blockedTime = getBlockedTimeForSlot(date, time);
     if (blockedTime) return 'blocked';
 
-    const appointment = dailyAppointments.find(apt => {
+    const appointment = appointments.find(apt => {
+      const aptDate = parseLocalDate(apt.appointment_date);
       const aptTime = apt.appointment_time.substring(0, 5);
-      return aptTime === time;
+      return isSameDay(aptDate, date) && aptTime === time;
     });
 
     if (!appointment) return 'available';
     
-    if (appointment.status === 'pending') return 'pending';
+    // Check if payment is awaiting confirmation (highest priority visual)
+    if (appointment.payment_status === 'awaiting_confirmation') {
+      return 'awaiting_payment';
+    }
     
-    // confirmed or completed = occupied
-    return 'occupied';
+    switch (appointment.status) {
+      case 'pending': return 'pending';
+      case 'confirmed': return 'confirmed';
+      case 'completed': return 'completed';
+      case 'cancelled': return 'cancelled';
+      default: return 'available';
+    }
   }
 
-  function getAppointmentForSlot(time: string): Appointment | undefined {
-    return dailyAppointments.find(apt => {
+  function getAppointmentForSlot(date: Date, time: string): Appointment | undefined {
+    return appointments.find(apt => {
+      const aptDate = parseLocalDate(apt.appointment_date);
       const aptTime = apt.appointment_time.substring(0, 5);
-      return aptTime === time;
+      return isSameDay(aptDate, date) && aptTime === time;
     });
   }
 
-  function handleSlotClick(time: string) {
-    const appointment = getAppointmentForSlot(time);
-    const blockedTime = getBlockedTimeForSlot(time);
+  function handleSlotClick(date: Date, time: string) {
+    const status = getSlotStatus(date, time);
+    if (status === 'unavailable') return;
+
+    const appointment = getAppointmentForSlot(date, time);
+    const blockedTime = getBlockedTimeForSlot(date, time);
     
-    setSelectedSlot({ date: selectedDate, time, appointment, blockedTime });
+    setSelectedSlot({ date, time, appointment, blockedTime });
     setDialogOpen(true);
   }
 
@@ -351,6 +347,7 @@ export default function FuncionarioAgenda() {
 
       if (!blockFullDay) {
         insertData.start_time = selectedSlot.time;
+        // Block 30 min slot
         const [h, m] = selectedSlot.time.split(':').map(Number);
         const endMinutes = h * 60 + m + 30;
         const endH = Math.floor(endMinutes / 60);
@@ -366,7 +363,7 @@ export default function FuncionarioAgenda() {
 
       toast.success(blockFullDay ? 'Dia inteiro bloqueado!' : 'Horário bloqueado!');
       setBlockDialogOpen(false);
-      fetchDailyData();
+      fetchBlockedTimes();
     } catch (error) {
       console.error('Error blocking time:', error);
       toast.error('Erro ao bloquear horário');
@@ -386,22 +383,22 @@ export default function FuncionarioAgenda() {
 
       toast.success('Horário desbloqueado!');
       setDialogOpen(false);
-      fetchDailyData();
+      fetchBlockedTimes();
     } catch (error) {
       console.error('Error unblocking time:', error);
       toast.error('Erro ao desbloquear horário');
     }
   }
 
-  async function handleUpdateStatus(appointmentId: string, newStatus: string) {
+  async function handleUpdateStatus(appointmentId: string, newStatus: string, updatePayment = false) {
     try {
       const updateData: { status: string; payment_status?: string } = { status: newStatus };
       
-      // When confirming, also mark payment as paid
-      if (newStatus === 'confirmed') {
+      // When confirming from awaiting_payment, also update payment_status to paid
+      if (updatePayment && newStatus === 'confirmed') {
         updateData.payment_status = 'paid';
       }
-      // When cancelling
+      // When cancelling, also update payment_status
       if (newStatus === 'cancelled') {
         updateData.payment_status = 'cancelled';
       }
@@ -413,239 +410,39 @@ export default function FuncionarioAgenda() {
 
       if (error) throw error;
 
-      // Update local state
       setAppointments(prev =>
         prev.map(apt =>
           apt.id === appointmentId ? { ...apt, ...updateData } : apt
         )
       );
-      setAllPendingAppointments(prev =>
-        prev.filter(apt => apt.id !== appointmentId)
-      );
 
       const statusMessages: Record<string, string> = {
-        confirmed: 'Consulta confirmada!',
+        confirmed: updatePayment ? 'Pagamento confirmado! Consulta agendada.' : 'Consulta confirmada com sucesso!',
         cancelled: 'Consulta cancelada.',
-        completed: 'Consulta realizada!',
+        completed: 'Consulta marcada como realizada!',
       };
 
       toast.success(statusMessages[newStatus] || 'Status atualizado!');
       setDialogOpen(false);
-      fetchDailyData();
-      fetchAllPendingAppointments();
     } catch (error) {
       console.error('Error updating status:', error);
       toast.error('Erro ao atualizar status');
     }
   }
 
-  function navigateDay(direction: 'prev' | 'next') {
-    setSelectedDate(prev => addDays(prev, direction === 'next' ? 1 : -1));
+  function navigateWeek(direction: 'prev' | 'next') {
+    setWeekStart(prev => addDays(prev, direction === 'next' ? 7 : -7));
   }
 
   function goToToday() {
-    setSelectedDate(new Date());
+    setWeekStart(startOfWeek(new Date(), { weekStartsOn: 1 }));
   }
-
-  function openWhatsApp(phone: string, patientName: string) {
-    const cleanPhone = phone.replace(/\D/g, '');
-    const message = encodeURIComponent(`Olá ${patientName}, sobre seu agendamento...`);
-    window.open(`https://wa.me/55${cleanPhone}?text=${message}`, '_blank');
-  }
-
-  // Render pending requests list
-  const renderRequestsList = () => {
-    if (allPendingAppointments.length === 0) {
-      return (
-        <Card>
-          <CardContent className="py-12">
-            <div className="text-center text-muted-foreground">
-              <CheckCircle2 className="h-16 w-16 mx-auto mb-4 text-emerald-500" />
-              <h3 className="text-lg font-medium mb-2">Nenhuma solicitação pendente!</h3>
-              <p className="text-sm">Você está em dia. Quando houver novas solicitações, elas aparecerão aqui.</p>
-            </div>
-          </CardContent>
-        </Card>
-      );
-    }
-
-    return (
-      <div className="space-y-4">
-        {allPendingAppointments.map(apt => {
-          const aptDate = parseLocalDate(apt.appointment_date);
-          return (
-            <Card key={apt.id} className="border-l-4 border-l-amber-400">
-              <CardContent className="p-4">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-2">
-                      <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200">
-                        🟡 Solicitação Pendente
-                      </Badge>
-                    </div>
-                    <div className="flex items-center gap-2 font-medium">
-                      <User className="h-4 w-4 text-muted-foreground" />
-                      {apt.patient_name}
-                    </div>
-                    <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                      <span className="flex items-center gap-1">
-                        <Calendar className="h-4 w-4" />
-                        {format(aptDate, "dd/MM/yyyy", { locale: ptBR })}
-                      </span>
-                      <span className="flex items-center gap-1">
-                        <Clock className="h-4 w-4" />
-                        {apt.appointment_time.substring(0, 5)}
-                      </span>
-                    </div>
-                    {apt.service && (
-                      <div className="flex items-center gap-1 text-sm text-muted-foreground">
-                        <FileText className="h-4 w-4" />
-                        {apt.service.name} ({apt.service.duration_minutes} min)
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="flex flex-wrap gap-2">
-                    <Button
-                      size="sm"
-                      onClick={() => handleUpdateStatus(apt.id, 'confirmed')}
-                      className="bg-emerald-600 hover:bg-emerald-700"
-                    >
-                      <CheckCircle2 className="h-4 w-4 mr-1" />
-                      Aceitar
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => handleUpdateStatus(apt.id, 'cancelled')}
-                      className="text-red-600 border-red-200 hover:bg-red-50"
-                    >
-                      <XCircle className="h-4 w-4 mr-1" />
-                      Recusar
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => openWhatsApp(apt.patient_phone, apt.patient_name)}
-                    >
-                      <MessageSquare className="h-4 w-4 mr-1" />
-                      WhatsApp
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => {
-                        setSelectedDate(aptDate);
-                        setViewMode('daily');
-                      }}
-                    >
-                      Ver horários
-                    </Button>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          );
-        })}
-      </div>
-    );
-  };
-
-  // Render daily schedule view
-  const renderDailySchedule = () => {
-    const dayOfWeek = selectedDate.getDay();
-    const schedule = schedules.find(s => s.day_of_week === dayOfWeek && s.is_active);
-
-    if (!schedule) {
-      return (
-        <Card>
-          <CardContent className="py-12">
-            <div className="text-center text-muted-foreground">
-              <Calendar className="h-16 w-16 mx-auto mb-4 opacity-50" />
-              <h3 className="text-lg font-medium mb-2">Dia sem expediente</h3>
-              <p className="text-sm">Você não tem horários configurados para {format(selectedDate, "EEEE", { locale: ptBR })}.</p>
-            </div>
-          </CardContent>
-        </Card>
-      );
-    }
-
-    return (
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-lg flex items-center gap-2">
-            <CalendarDays className="h-5 w-5" />
-            {format(selectedDate, "EEEE, d 'de' MMMM", { locale: ptBR })}
-            {isToday(selectedDate) && (
-              <Badge className="bg-primary text-primary-foreground">Hoje</Badge>
-            )}
-          </CardTitle>
-          <p className="text-sm text-muted-foreground">
-            Você está vendo apenas seus horários disponíveis e compromissos do dia.
-          </p>
-        </CardHeader>
-        <CardContent>
-          {loading ? (
-            <div className="space-y-2">
-              {[1, 2, 3, 4, 5].map(i => (
-                <Skeleton key={i} className="h-12 w-full" />
-              ))}
-            </div>
-          ) : (
-            <div className="space-y-2">
-              {timeSlots.map(time => {
-                const status = getSimpleSlotStatus(time);
-                const appointment = getAppointmentForSlot(time);
-                
-                return (
-                  <div
-                    key={time}
-                    onClick={() => handleSlotClick(time)}
-                    className={`
-                      flex items-center gap-4 p-3 rounded-lg cursor-pointer transition-all
-                      ${SIMPLE_STATUS_COLORS[status]} text-white
-                    `}
-                  >
-                    <span className="font-mono font-medium min-w-[60px]">{time}</span>
-                    <span className="flex-1">
-                      {status === 'blocked' && (
-                        <span className="flex items-center gap-2">
-                          <Ban className="h-4 w-4" />
-                          Bloqueado
-                        </span>
-                      )}
-                      {status === 'available' && 'Livre'}
-                      {status === 'pending' && appointment && (
-                        <span className="flex items-center gap-2">
-                          <Clock className="h-4 w-4" />
-                          {appointment.patient_name} - Pendente
-                        </span>
-                      )}
-                      {status === 'occupied' && appointment && (
-                        <span className="flex items-center gap-2">
-                          <User className="h-4 w-4" />
-                          {appointment.patient_name}
-                        </span>
-                      )}
-                    </span>
-                    <Badge variant="secondary" className="bg-white/20 text-white border-0">
-                      {SIMPLE_STATUS_LABELS[status]}
-                    </Badge>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </CardContent>
-      </Card>
-    );
-  };
 
   const renderSlotDialog = () => {
     if (!selectedSlot) return null;
 
-    const { time, appointment, blockedTime } = selectedSlot;
-    const status = getSimpleSlotStatus(time);
+    const { date, time, appointment, blockedTime } = selectedSlot;
+    const status = getSlotStatus(date, time);
 
     return (
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
@@ -653,13 +450,13 @@ export default function FuncionarioAgenda() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Calendar className="h-5 w-5" />
-              {format(selectedDate, "EEEE, d 'de' MMMM", { locale: ptBR })}
+              {format(date, "EEEE, d 'de' MMMM", { locale: ptBR })}
             </DialogTitle>
             <DialogDescription className="flex items-center gap-2">
               <Clock className="h-4 w-4" />
               {time}
-              <Badge className={`ml-2 ${SIMPLE_STATUS_COLORS[status]} text-white border-0`}>
-                {SIMPLE_STATUS_LABELS[status]}
+              <Badge className={`ml-2 ${STATUS_COLORS[status]} text-white border-0`}>
+                {STATUS_LABELS[status]}
               </Badge>
             </DialogDescription>
           </DialogHeader>
@@ -727,32 +524,54 @@ export default function FuncionarioAgenda() {
               </div>
 
               <div className="flex flex-wrap gap-2">
-                {status === 'pending' && (
+                {status === 'awaiting_payment' && (
                   <>
+                    <div className="w-full mb-2 p-3 bg-orange-50 border border-orange-200 rounded-lg">
+                      <p className="text-sm font-medium text-orange-800">
+                        ⚠️ Cliente informou que já pagou
+                      </p>
+                      <p className="text-xs text-orange-600 mt-1">
+                        Confira no app do banco antes de confirmar!
+                      </p>
+                    </div>
                     <Button 
-                      onClick={() => handleUpdateStatus(appointment.id, 'confirmed')}
-                      className="flex-1 bg-emerald-600 hover:bg-emerald-700"
+                      onClick={() => handleUpdateStatus(appointment.id, 'confirmed', true)}
+                      className="flex-1 bg-green-600 hover:bg-green-700"
                     >
-                      <CheckCircle2 className="h-4 w-4 mr-2" />
-                      Aceitar
+                      ✅ Confirmar Pagamento
                     </Button>
                     <Button 
                       variant="outline"
                       onClick={() => handleUpdateStatus(appointment.id, 'cancelled')}
-                      className="flex-1 text-red-600 border-red-200 hover:bg-red-50"
+                      className="flex-1"
                     >
-                      <XCircle className="h-4 w-4 mr-2" />
+                      ❌ Recusar
+                    </Button>
+                  </>
+                )}
+                {status === 'pending' && (
+                  <>
+                    <Button 
+                      onClick={() => handleUpdateStatus(appointment.id, 'confirmed')}
+                      className="flex-1 bg-red-500 hover:bg-red-600"
+                    >
+                      Confirmar
+                    </Button>
+                    <Button 
+                      variant="outline"
+                      onClick={() => handleUpdateStatus(appointment.id, 'cancelled')}
+                      className="flex-1"
+                    >
                       Recusar
                     </Button>
                   </>
                 )}
-                {status === 'occupied' && appointment.status === 'confirmed' && (
+                {status === 'confirmed' && (
                   <>
                     <Button 
                       onClick={() => handleUpdateStatus(appointment.id, 'completed')}
                       className="flex-1"
                     >
-                      <CheckCircle2 className="h-4 w-4 mr-2" />
                       Marcar como Realizada
                     </Button>
                     <Button 
@@ -764,19 +583,11 @@ export default function FuncionarioAgenda() {
                     </Button>
                   </>
                 )}
-                {status === 'occupied' && appointment.status === 'completed' && (
-                  <p className="text-sm text-muted-foreground w-full text-center py-2">
-                    ✅ Esta consulta já foi realizada.
+                {status === 'completed' && (
+                  <p className="text-sm text-muted-foreground w-full text-center">
+                    Esta consulta já foi realizada.
                   </p>
                 )}
-                <Button
-                  variant="outline"
-                  onClick={() => openWhatsApp(appointment.patient_phone, appointment.patient_name)}
-                  className="w-full"
-                >
-                  <MessageSquare className="h-4 w-4 mr-2" />
-                  Contatar via WhatsApp
-                </Button>
               </div>
             </div>
           ) : status === 'available' ? (
@@ -826,7 +637,7 @@ export default function FuncionarioAgenda() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="reason">Motivo (opcional)</Label>
+              <Label htmlFor="reason">Motivo (opcional - visível para clientes)</Label>
               <Textarea 
                 id="reason"
                 placeholder="Ex: Consulta médica, Férias, Reunião..."
@@ -873,88 +684,144 @@ export default function FuncionarioAgenda() {
   return (
     <FuncionarioLayout>
       <div className="space-y-6">
-        {/* Header with view mode toggle */}
+        {/* Header */}
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div>
             <h1 className="text-2xl font-bold">Minha Agenda</h1>
-            <p className="text-muted-foreground text-sm">
-              Gerencie suas solicitações e compromissos
+            <p className="text-muted-foreground">
+              {format(weekStart, "d 'de' MMMM", { locale: ptBR })} - {format(addDays(weekStart, 6), "d 'de' MMMM 'de' yyyy", { locale: ptBR })}
             </p>
           </div>
-          
-          {/* View mode toggle */}
-          <div className="flex items-center gap-2 bg-muted p-1 rounded-lg">
-            <Button
-              variant={viewMode === 'requests' ? 'default' : 'ghost'}
-              size="sm"
-              onClick={() => setViewMode('requests')}
-              className="gap-2"
-            >
-              <List className="h-4 w-4" />
-              Solicitações
-              {allPendingAppointments.length > 0 && (
-                <Badge variant="secondary" className="ml-1 bg-amber-100 text-amber-700">
-                  {allPendingAppointments.length}
-                </Badge>
-              )}
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="icon" onClick={() => navigateWeek('prev')}>
+              <ChevronLeft className="h-4 w-4" />
             </Button>
-            <Button
-              variant={viewMode === 'daily' ? 'default' : 'ghost'}
-              size="sm"
-              onClick={() => setViewMode('daily')}
-              className="gap-2"
-            >
-              <CalendarDays className="h-4 w-4" />
-              Agenda do Dia
+            <Button variant="outline" onClick={goToToday}>
+              Hoje
+            </Button>
+            <Button variant="outline" size="icon" onClick={() => navigateWeek('next')}>
+              <ChevronRight className="h-4 w-4" />
             </Button>
           </div>
         </div>
 
-        {/* Simplified Legend */}
+        {/* Legend */}
         <Card>
           <CardContent className="py-3">
             <div className="flex flex-wrap items-center gap-4 text-sm">
               <span className="font-medium text-muted-foreground">Legenda:</span>
               <div className="flex items-center gap-2">
-                <div className={`w-4 h-4 rounded ${SIMPLE_STATUS_COLORS.available}`} />
-                <span>Livre</span>
+                <div className={`w-4 h-4 rounded ${STATUS_COLORS.available}`} />
+                <span>Disponível</span>
               </div>
               <div className="flex items-center gap-2">
-                <div className={`w-4 h-4 rounded ${SIMPLE_STATUS_COLORS.pending}`} />
-                <span>Pendente</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className={`w-4 h-4 rounded ${SIMPLE_STATUS_COLORS.occupied}`} />
-                <span>Ocupado</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className={`w-4 h-4 rounded ${SIMPLE_STATUS_COLORS.blocked}`} />
+                <div className={`w-4 h-4 rounded ${STATUS_COLORS.blocked}`} />
                 <span>Bloqueado</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className={`w-4 h-4 rounded ${STATUS_COLORS.pending}`} />
+                <span>Aguardando</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className={`w-4 h-4 rounded ${STATUS_COLORS.awaiting_payment}`} />
+                <span>💰 Conferir Pagamento</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className={`w-4 h-4 rounded ${STATUS_COLORS.confirmed}`} />
+                <span>Confirmado</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className={`w-4 h-4 rounded ${STATUS_COLORS.completed}`} />
+                <span>Realizado</span>
               </div>
             </div>
           </CardContent>
         </Card>
 
-        {/* View mode content */}
-        {viewMode === 'requests' ? (
-          renderRequestsList()
-        ) : (
-          <>
-            {/* Date navigation for daily view */}
-            <div className="flex items-center justify-center gap-2">
-              <Button variant="outline" size="icon" onClick={() => navigateDay('prev')}>
-                <ChevronLeft className="h-4 w-4" />
-              </Button>
-              <Button variant="outline" onClick={goToToday}>
-                Hoje
-              </Button>
-              <Button variant="outline" size="icon" onClick={() => navigateDay('next')}>
-                <ChevronRight className="h-4 w-4" />
-              </Button>
-            </div>
-            {renderDailySchedule()}
-          </>
-        )}
+        {/* Calendar Grid */}
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-lg">Calendário Semanal</CardTitle>
+          </CardHeader>
+          <CardContent className="p-0 overflow-x-auto">
+            {loading ? (
+              <div className="flex items-center justify-center h-64">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+              </div>
+            ) : (
+              <div className="min-w-[700px]">
+                {/* Days Header */}
+                <div className="grid grid-cols-8 border-b bg-muted/30">
+                  <div className="p-3 text-center text-sm font-medium text-muted-foreground border-r">
+                    Horário
+                  </div>
+                  {weekDays.map((day, idx) => {
+                    const isToday = isSameDay(day, new Date());
+                    return (
+                      <div 
+                        key={idx} 
+                        className={`p-3 text-center border-r last:border-r-0 ${isToday ? 'bg-primary/10' : ''}`}
+                      >
+                        <div className="text-xs text-muted-foreground uppercase">
+                          {format(day, 'EEE', { locale: ptBR })}
+                        </div>
+                        <div className={`text-lg font-semibold ${isToday ? 'text-primary' : ''}`}>
+                          {format(day, 'd')}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Time Slots */}
+                <div className="max-h-[500px] overflow-y-auto">
+                  {timeSlots.map((time) => (
+                    <div key={time} className="grid grid-cols-8 border-b last:border-b-0">
+                      <div className="p-2 text-center text-sm text-muted-foreground border-r bg-muted/20 flex items-center justify-center">
+                        {time}
+                      </div>
+                      {weekDays.map((day, dayIdx) => {
+                        const status = getSlotStatus(day, time);
+                        const appointment = getAppointmentForSlot(day, time);
+                        const blockedTime = getBlockedTimeForSlot(day, time);
+                        const isClickable = status !== 'unavailable';
+
+                        return (
+                          <div
+                            key={dayIdx}
+                            onClick={() => isClickable && handleSlotClick(day, time)}
+                            className={`
+                              p-1 border-r last:border-r-0 min-h-[48px] transition-all
+                              ${isClickable ? 'cursor-pointer' : ''}
+                            `}
+                          >
+                            {status !== 'unavailable' && (
+                              <div 
+                                className={`
+                                  h-full w-full rounded-md flex items-center justify-center text-xs text-white font-medium
+                                  ${STATUS_COLORS[status]}
+                                  transition-colors
+                                `}
+                              >
+                                {status === 'blocked' ? (
+                                  <Ban className="h-4 w-4" />
+                                ) : appointment ? (
+                                  <span className="truncate px-1 text-[10px]">
+                                    {appointment.patient_name.split(' ')[0]}
+                                  </span>
+                                ) : null}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
 
         {/* Dialogs */}
         {renderSlotDialog()}
