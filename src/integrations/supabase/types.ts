@@ -285,6 +285,56 @@ export type Database = {
           },
         ]
       }
+      professional_payment_history: {
+        Row: {
+          action: string
+          changed_by: string | null
+          changed_by_name: string | null
+          created_at: string
+          id: string
+          new_amount_cents: number | null
+          new_status: string | null
+          notes: string | null
+          payment_id: string
+          previous_amount_cents: number | null
+          previous_status: string | null
+        }
+        Insert: {
+          action: string
+          changed_by?: string | null
+          changed_by_name?: string | null
+          created_at?: string
+          id?: string
+          new_amount_cents?: number | null
+          new_status?: string | null
+          notes?: string | null
+          payment_id: string
+          previous_amount_cents?: number | null
+          previous_status?: string | null
+        }
+        Update: {
+          action?: string
+          changed_by?: string | null
+          changed_by_name?: string | null
+          created_at?: string
+          id?: string
+          new_amount_cents?: number | null
+          new_status?: string | null
+          notes?: string | null
+          payment_id?: string
+          previous_amount_cents?: number | null
+          previous_status?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "professional_payment_history_payment_id_fkey"
+            columns: ["payment_id"]
+            isOneToOne: false
+            referencedRelation: "professional_payments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       professional_payments: {
         Row: {
           amount_due_cents: number
