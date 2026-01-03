@@ -24,6 +24,7 @@ import AdminServices from "./pages/admin/AdminServices";
 import AdminReports from "./pages/admin/AdminReports";
 import AdminSettings from "./pages/admin/AdminSettings";
 import AdminProfessionals from "./pages/admin/AdminProfessionals";
+import AdminFinanceiro from "./pages/admin/AdminFinanceiro";
 import ProfessionalDashboard from "./pages/admin/ProfessionalDashboard";
 import FuncionarioDashboard from "./pages/funcionario/FuncionarioDashboard";
 import FuncionarioAgenda from "./pages/funcionario/FuncionarioAgenda";
@@ -103,6 +104,14 @@ const App = () => (
               element={
                 <ProtectedRoute allowedRoles={['admin']}>
                   <AdminProfessionals />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/financeiro"
+              element={
+                <ProtectedRoute allowedRoles={['admin']}>
+                  <AdminFinanceiro />
                 </ProtectedRoute>
               }
             />
