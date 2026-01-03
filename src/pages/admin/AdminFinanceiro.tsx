@@ -2,12 +2,12 @@ import { useState, useEffect } from 'react';
 import { AdminLayout } from '@/components/layout/AdminLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { supabase } from '@/integrations/supabase/client';
-import { DollarSign, TrendingUp, Users, Calendar, Filter, UserCheck, ArrowUp, ArrowDown, Minus, Target, Pencil, FileDown } from 'lucide-react';
+import { DollarSign, TrendingUp, Users, Calendar, Filter, UserCheck, ArrowUp, ArrowDown, Minus, Target, Pencil, FileDown, PieChart } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { format, startOfMonth, endOfMonth, subMonths } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine, Cell } from 'recharts';
+import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine, Cell, PieChart as RechartsPieChart, Pie } from 'recharts';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -36,6 +36,15 @@ interface ProfessionalEarning {
 interface MonthlyChartData {
   month: string;
   [professionalId: string]: number | string;
+}
+
+interface SpecialtyData {
+  specialty: string;
+  label: string;
+  revenue: number;
+  appointments: number;
+  averageTicket: number;
+  professionalsCount: number;
 }
 
 const CHART_COLORS = [
@@ -327,6 +336,23 @@ export default function AdminFinanceiro() {
   const appointmentsVariation = previousMonthTotals.appointments > 0 
     ? ((totalAppointments - previousMonthTotals.appointments) / previousMonthTotals.appointments) * 100 
     : totalAppointments > 0 ? 100 : 0;
+
+  // Calculate specialty comparison data
+  const specialtyComparisonData: SpecialtyData[] = specialties.map(spec => {
+    const specProfessionals = earnings.filter(e => e.professional.specialty_id === spec);
+    const revenue = specProfessionals.reduce((sum, e) => sum + e.totalEarnings, 0);
+    const appointments = specProfessionals.reduce((sum, e) => sum + e.appointmentCount, 0);
+    return {
+      specialty: spec,
+      label: specialtyLabels[spec] || spec,
+      revenue,
+      appointments,
+      averageTicket: appointments > 0 ? revenue / appointments : 0,
+      professionalsCount: specProfessionals.length,
+    };
+  }).sort((a, b) => b.revenue - a.revenue);
+
+  const totalSpecialtyRevenue = specialtyComparisonData.reduce((sum, s) => sum + s.revenue, 0);
 
   const getVariationIcon = (variation: number) => {
     if (variation > 0) return <ArrowUp className="h-4 w-4 text-green-500" />;
@@ -1010,6 +1036,117 @@ export default function AdminFinanceiro() {
                 <span className="text-muted-foreground">Meta definida</span>
               </div>
             </div>
+          </CardContent>
+        </Card>
+
+        {/* Specialty Comparison */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <PieChart className="h-5 w-5" />
+              Comparativo por Especialidade
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {specialtyComparisonData.length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground">
+                Nenhuma especialidade encontrada
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* Pie Chart */}
+                <div className="h-[300px]">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <RechartsPieChart>
+                      <Pie
+                        data={specialtyComparisonData}
+                        dataKey="revenue"
+                        nameKey="label"
+                        cx="50%"
+                        cy="50%"
+                        outerRadius={100}
+                        label={({ label, percent }) => `${label} (${(percent * 100).toFixed(0)}%)`}
+                        labelLine={true}
+                      >
+                        {specialtyComparisonData.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
+                        ))}
+                      </Pie>
+                      <Tooltip 
+                        contentStyle={{
+                          backgroundColor: 'hsl(var(--background))',
+                          border: '1px solid hsl(var(--border))',
+                          borderRadius: '8px',
+                        }}
+                        formatter={(value: number) => [`${formatCurrency(value)}`, 'Receita']}
+                      />
+                    </RechartsPieChart>
+                  </ResponsiveContainer>
+                </div>
+
+                {/* Specialty Table */}
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="border-b border-border">
+                        <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">
+                          Especialidade
+                        </th>
+                        <th className="text-right py-3 px-4 text-sm font-medium text-muted-foreground">
+                          Receita
+                        </th>
+                        <th className="text-right py-3 px-4 text-sm font-medium text-muted-foreground">
+                          %
+                        </th>
+                        <th className="text-right py-3 px-4 text-sm font-medium text-muted-foreground">
+                          Consultas
+                        </th>
+                        <th className="text-right py-3 px-4 text-sm font-medium text-muted-foreground">
+                          Ticket Médio
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {specialtyComparisonData.map((item, index) => (
+                        <tr
+                          key={item.specialty}
+                          className="border-b border-border last:border-0 hover:bg-muted/50 transition-colors"
+                        >
+                          <td className="py-3 px-4">
+                            <div className="flex items-center gap-2">
+                              <div 
+                                className="w-3 h-3 rounded-full" 
+                                style={{ backgroundColor: CHART_COLORS[index % CHART_COLORS.length] }}
+                              />
+                              <span className="font-medium">{item.label}</span>
+                              <span className="text-xs text-muted-foreground">
+                                ({item.professionalsCount} prof.)
+                              </span>
+                            </div>
+                          </td>
+                          <td className="py-3 px-4 text-right font-semibold text-green-500">
+                            {formatCurrency(item.revenue)}
+                          </td>
+                          <td className="py-3 px-4 text-right text-muted-foreground">
+                            {totalSpecialtyRevenue > 0 
+                              ? ((item.revenue / totalSpecialtyRevenue) * 100).toFixed(1)
+                              : 0}%
+                          </td>
+                          <td className="py-3 px-4 text-right">
+                            <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-blue-500/10 text-blue-500 text-sm">
+                              {item.appointments}
+                            </span>
+                          </td>
+                          <td className="py-3 px-4 text-right text-muted-foreground">
+                            {formatCurrency(item.averageTicket)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
 
