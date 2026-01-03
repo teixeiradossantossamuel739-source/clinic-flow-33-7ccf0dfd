@@ -7,7 +7,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { format, startOfMonth, endOfMonth, subMonths } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
 interface Professional {
   id: string;
@@ -441,6 +441,72 @@ export default function AdminFinanceiro() {
                       )
                     ))}
                   </LineChart>
+                </ResponsiveContainer>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Comparison Bar Chart */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <TrendingUp className="h-5 w-5" />
+              Comparativo: Mês Atual vs Mês Anterior
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {earnings.length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground">
+                Nenhum profissional encontrado
+              </div>
+            ) : (
+              <div className="h-[350px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart 
+                    data={earnings.map(e => ({
+                      name: e.professional.name.split(' ')[0],
+                      'Mês Atual': e.totalEarnings / 100,
+                      'Mês Anterior': (e.previousEarnings || 0) / 100,
+                    }))}
+                    layout="vertical"
+                    margin={{ left: 20, right: 20 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                    <XAxis 
+                      type="number"
+                      stroke="hsl(var(--muted-foreground))"
+                      fontSize={12}
+                      tickFormatter={(value) => `R$ ${value.toLocaleString('pt-BR')}`}
+                    />
+                    <YAxis 
+                      type="category"
+                      dataKey="name"
+                      stroke="hsl(var(--muted-foreground))"
+                      fontSize={12}
+                      width={80}
+                    />
+                    <Tooltip 
+                      contentStyle={{
+                        backgroundColor: 'hsl(var(--background))',
+                        border: '1px solid hsl(var(--border))',
+                        borderRadius: '8px',
+                      }}
+                      formatter={(value: number) => [`R$ ${value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`, '']}
+                    />
+                    <Legend />
+                    <Bar 
+                      dataKey="Mês Atual" 
+                      fill="hsl(var(--primary))" 
+                      radius={[0, 4, 4, 0]}
+                    />
+                    <Bar 
+                      dataKey="Mês Anterior" 
+                      fill="hsl(var(--muted-foreground))" 
+                      radius={[0, 4, 4, 0]}
+                      opacity={0.6}
+                    />
+                  </BarChart>
                 </ResponsiveContainer>
               </div>
             )}
