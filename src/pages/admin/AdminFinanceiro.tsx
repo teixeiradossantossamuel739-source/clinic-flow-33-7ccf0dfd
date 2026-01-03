@@ -60,6 +60,30 @@ export default function AdminFinanceiro() {
   const [goalInputs, setGoalInputs] = useState<Record<string, string>>({});
   const [savingGoals, setSavingGoals] = useState(false);
 
+  const checkGoalAchievement = async (professionalId: string, professionalName: string, currentEarnings: number, goalAmount: number, year: number, month: number) => {
+    const monthName = format(new Date(year, month - 1), 'MMMM yyyy', { locale: ptBR });
+
+    // Check if notification already exists for this goal achievement this month
+    const { data: existingNotif } = await supabase
+      .from('notifications')
+      .select('id')
+      .eq('professional_id', professionalId)
+      .eq('type', 'goal_achieved')
+      .gte('created_at', startOfMonth(new Date(year, month - 1)).toISOString())
+      .lte('created_at', endOfMonth(new Date(year, month - 1)).toISOString())
+      .limit(1);
+
+    if (existingNotif && existingNotif.length > 0) return; // Already notified
+
+    // Create notification
+    await supabase.from('notifications').insert({
+      professional_id: professionalId,
+      type: 'goal_achieved',
+      title: '🎉 Meta Atingida!',
+      message: `Parabéns! Você atingiu sua meta de ${formatCurrency(goalAmount)} em ${monthName}. Faturamento atual: ${formatCurrency(currentEarnings)}`,
+    });
+  };
+
   useEffect(() => {
     fetchData();
     fetchMonthlyEvolution();
@@ -171,6 +195,13 @@ export default function AdminFinanceiro() {
       earningsArray.sort((a, b) => b.totalEarnings - a.totalEarnings);
 
       setEarnings(earningsArray);
+
+      // Check for goal achievements and send notifications
+      for (const earning of earningsArray) {
+        if (earning.goalAmount && earning.totalEarnings >= earning.goalAmount) {
+          await checkGoalAchievement(earning.professional.id, earning.professional.name, earning.totalEarnings, earning.goalAmount, year, month);
+        }
+      }
     } catch (error) {
       console.error('Error fetching financial data:', error);
     } finally {
@@ -272,6 +303,34 @@ export default function AdminFinanceiro() {
     setGoalsDialogOpen(true);
   };
 
+  const checkAndNotifyGoalAchieved = async (professionalId: string, professionalName: string, currentEarnings: number, goalAmount: number) => {
+    // Only notify if goal is achieved
+    if (currentEarnings < goalAmount) return;
+
+    const [year, month] = selectedMonth.split('-').map(Number);
+    const monthName = format(new Date(year, month - 1), 'MMMM yyyy', { locale: ptBR });
+
+    // Check if notification already exists for this goal achievement
+    const { data: existingNotif } = await supabase
+      .from('notifications')
+      .select('id')
+      .eq('professional_id', professionalId)
+      .eq('type', 'goal_achieved')
+      .gte('created_at', startOfMonth(new Date(year, month - 1)).toISOString())
+      .lte('created_at', endOfMonth(new Date(year, month - 1)).toISOString())
+      .limit(1);
+
+    if (existingNotif && existingNotif.length > 0) return; // Already notified
+
+    // Create notification
+    await supabase.from('notifications').insert({
+      professional_id: professionalId,
+      type: 'goal_achieved',
+      title: '🎉 Meta Atingida!',
+      message: `Parabéns! Você atingiu sua meta de ${formatCurrency(goalAmount)} em ${monthName}. Faturamento atual: ${formatCurrency(currentEarnings)}`,
+    });
+  };
+
   const handleSaveGoals = async () => {
     setSavingGoals(true);
     try {
@@ -280,6 +339,7 @@ export default function AdminFinanceiro() {
       for (const earning of earnings) {
         const inputValue = goalInputs[earning.professional.id];
         const goalCents = inputValue ? Math.round(parseFloat(inputValue) * 100) : 0;
+        const previousGoal = earning.goalAmount || 0;
         
         if (goalCents > 0) {
           if (earning.goalId) {
@@ -298,6 +358,16 @@ export default function AdminFinanceiro() {
                 year,
                 goal_amount_cents: goalCents,
               });
+          }
+
+          // Check if goal was just set or lowered and now earnings meet the goal
+          if (earning.totalEarnings >= goalCents && (previousGoal === 0 || goalCents < previousGoal)) {
+            await checkAndNotifyGoalAchieved(
+              earning.professional.id,
+              earning.professional.name,
+              earning.totalEarnings,
+              goalCents
+            );
           }
         } else if (earning.goalId) {
           // Delete goal if value is 0 or empty
