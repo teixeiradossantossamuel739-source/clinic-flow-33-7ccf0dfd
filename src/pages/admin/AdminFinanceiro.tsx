@@ -6,6 +6,7 @@ import { DollarSign, TrendingUp, Users, Calendar, Filter } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { format, startOfMonth, endOfMonth, subMonths } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
 interface Professional {
   id: string;
@@ -21,14 +22,32 @@ interface ProfessionalEarning {
   averageTicket: number;
 }
 
+interface MonthlyChartData {
+  month: string;
+  [professionalId: string]: number | string;
+}
+
+const CHART_COLORS = [
+  'hsl(var(--primary))',
+  'hsl(142, 76%, 36%)',
+  'hsl(221, 83%, 53%)',
+  'hsl(280, 87%, 50%)',
+  'hsl(38, 92%, 50%)',
+  'hsl(0, 84%, 60%)',
+  'hsl(180, 70%, 45%)',
+  'hsl(330, 80%, 55%)',
+];
+
 export default function AdminFinanceiro() {
   const [professionals, setProfessionals] = useState<Professional[]>([]);
   const [earnings, setEarnings] = useState<ProfessionalEarning[]>([]);
+  const [monthlyChartData, setMonthlyChartData] = useState<MonthlyChartData[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedMonth, setSelectedMonth] = useState<string>(format(new Date(), 'yyyy-MM'));
 
   useEffect(() => {
     fetchData();
+    fetchMonthlyEvolution();
   }, [selectedMonth]);
 
   const fetchData = async () => {
@@ -88,6 +107,52 @@ export default function AdminFinanceiro() {
       console.error('Error fetching financial data:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchMonthlyEvolution = async () => {
+    try {
+      // Fetch professionals first
+      const { data: profData } = await supabase
+        .from('professionals')
+        .select('id, name')
+        .eq('is_active', true);
+
+      if (!profData || profData.length === 0) return;
+
+      // Get last 6 months data
+      const chartData: MonthlyChartData[] = [];
+      
+      for (let i = 5; i >= 0; i--) {
+        const date = subMonths(new Date(), i);
+        const startDate = startOfMonth(date);
+        const endDate = endOfMonth(date);
+        const monthLabel = format(date, 'MMM/yy', { locale: ptBR });
+
+        const { data: appointments } = await supabase
+          .from('appointments')
+          .select('professional_uuid, amount_cents')
+          .gte('appointment_date', format(startDate, 'yyyy-MM-dd'))
+          .lte('appointment_date', format(endDate, 'yyyy-MM-dd'))
+          .eq('status', 'completed')
+          .eq('payment_status', 'paid');
+
+        const monthData: MonthlyChartData = { month: monthLabel };
+
+        profData.forEach((prof) => {
+          const profAppointments = (appointments || []).filter(
+            (apt) => apt.professional_uuid === prof.id
+          );
+          const total = profAppointments.reduce((sum, apt) => sum + apt.amount_cents, 0);
+          monthData[prof.id] = total / 100; // Convert to reais
+        });
+
+        chartData.push(monthData);
+      }
+
+      setMonthlyChartData(chartData);
+    } catch (error) {
+      console.error('Error fetching monthly evolution:', error);
     }
   };
 
@@ -183,6 +248,62 @@ export default function AdminFinanceiro() {
             </CardContent>
           </Card>
         </div>
+
+        {/* Monthly Evolution Chart */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <TrendingUp className="h-5 w-5" />
+              Evolução Mensal de Ganhos
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {professionals.length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground">
+                Nenhum profissional encontrado
+              </div>
+            ) : (
+              <div className="h-[350px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={monthlyChartData}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                    <XAxis 
+                      dataKey="month" 
+                      stroke="hsl(var(--muted-foreground))"
+                      fontSize={12}
+                    />
+                    <YAxis 
+                      stroke="hsl(var(--muted-foreground))"
+                      fontSize={12}
+                      tickFormatter={(value) => `R$ ${value.toLocaleString('pt-BR')}`}
+                    />
+                    <Tooltip 
+                      contentStyle={{
+                        backgroundColor: 'hsl(var(--background))',
+                        border: '1px solid hsl(var(--border))',
+                        borderRadius: '8px',
+                      }}
+                      formatter={(value: number) => [`R$ ${value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`, '']}
+                    />
+                    <Legend />
+                    {professionals.map((prof, index) => (
+                      <Line
+                        key={prof.id}
+                        type="monotone"
+                        dataKey={prof.id}
+                        name={prof.name}
+                        stroke={CHART_COLORS[index % CHART_COLORS.length]}
+                        strokeWidth={2}
+                        dot={{ r: 4 }}
+                        activeDot={{ r: 6 }}
+                      />
+                    ))}
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            )}
+          </CardContent>
+        </Card>
 
         {/* Professionals Earnings Table */}
         <Card>
