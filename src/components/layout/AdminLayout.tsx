@@ -21,9 +21,7 @@ import { useAuth } from '@/contexts/AuthContext';
 
 // Define nav items with optional adminOnly flag
 const allNavItems = [
-  { name: 'Dashboard', href: '/admin', icon: LayoutDashboard, adminOnly: false },
   { name: 'Agenda', href: '/admin/agenda', icon: Calendar, adminOnly: false },
-  { name: 'Pacientes', href: '/admin/pacientes', icon: Users, adminOnly: false },
   { name: 'Funcionários', href: '/admin/funcionarios', icon: Users, adminOnly: true },
   { name: 'Financeiro', href: '/admin/financeiro', icon: DollarSign, adminOnly: true },
   { name: 'Pagamentos', href: '/admin/pagamentos', icon: DollarSign, adminOnly: true },
