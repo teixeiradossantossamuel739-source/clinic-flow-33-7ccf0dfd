@@ -24,6 +24,7 @@ import {
 import { Plus, Edit, DoorOpen } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { RoomOccupancyReport } from '@/components/admin/RoomOccupancyReport';
 
 interface Room {
   id: string;
@@ -34,8 +35,26 @@ interface Room {
   created_at: string;
 }
 
+interface Professional {
+  id: string;
+  name: string;
+  profession: string;
+  room_id: string | null;
+}
+
+interface Schedule {
+  id: string;
+  professional_id: string;
+  day_of_week: number;
+  start_time: string;
+  end_time: string;
+  is_active: boolean;
+}
+
 export default function AdminRooms() {
   const [rooms, setRooms] = useState<Room[]>([]);
+  const [professionals, setProfessionals] = useState<Professional[]>([]);
+  const [schedules, setSchedules] = useState<Schedule[]>([]);
   const [loading, setLoading] = useState(true);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingRoom, setEditingRoom] = useState<Room | null>(null);
@@ -47,21 +66,27 @@ export default function AdminRooms() {
   });
 
   useEffect(() => {
-    fetchRooms();
+    fetchData();
   }, []);
 
-  const fetchRooms = async () => {
+  const fetchData = async () => {
     try {
-      const { data, error } = await supabase
-        .from('clinic_rooms')
-        .select('*')
-        .order('name');
+      const [roomsRes, professionalsRes, schedulesRes] = await Promise.all([
+        supabase.from('clinic_rooms').select('*').order('name'),
+        supabase.from('professionals').select('id, name, profession, room_id').eq('is_active', true),
+        supabase.from('professional_schedules').select('id, professional_id, day_of_week, start_time, end_time, is_active'),
+      ]);
 
-      if (error) throw error;
-      setRooms(data || []);
+      if (roomsRes.error) throw roomsRes.error;
+      if (professionalsRes.error) throw professionalsRes.error;
+      if (schedulesRes.error) throw schedulesRes.error;
+
+      setRooms(roomsRes.data || []);
+      setProfessionals(professionalsRes.data || []);
+      setSchedules(schedulesRes.data || []);
     } catch (error) {
-      console.error('Error fetching rooms:', error);
-      toast.error('Erro ao carregar salas');
+      console.error('Error fetching data:', error);
+      toast.error('Erro ao carregar dados');
     } finally {
       setLoading(false);
     }
@@ -123,7 +148,7 @@ export default function AdminRooms() {
       }
 
       setIsDialogOpen(false);
-      fetchRooms();
+      fetchData();
     } catch (error: any) {
       console.error('Error saving room:', error);
       toast.error(error.message || 'Erro ao salvar sala');
@@ -209,6 +234,13 @@ export default function AdminRooms() {
             </TableBody>
           </Table>
         </Card>
+
+        {/* Occupancy Report */}
+        <RoomOccupancyReport 
+          rooms={rooms} 
+          professionals={professionals} 
+          schedules={schedules} 
+        />
       </div>
 
       {/* Room Dialog */}
