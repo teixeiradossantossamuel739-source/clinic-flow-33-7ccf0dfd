@@ -1,6 +1,14 @@
+import { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { Users, Clock, Calendar } from 'lucide-react';
 
 interface Room {
@@ -57,7 +65,11 @@ const calculateHoursFromSchedule = (startTime: string, endTime: string): number 
 };
 
 export function RoomOccupancyReport({ rooms, professionals, schedules }: RoomOccupancyReportProps) {
+  const [selectedRoomId, setSelectedRoomId] = useState<string>('all');
   const activeRooms = rooms.filter(r => r.is_active);
+  const filteredRooms = selectedRoomId === 'all' 
+    ? activeRooms 
+    : activeRooms.filter(r => r.id === selectedRoomId);
 
   const getRoomProfessionals = (roomId: string) => {
     return professionals.filter(p => p.room_id === roomId);
@@ -110,13 +122,29 @@ export function RoomOccupancyReport({ rooms, professionals, schedules }: RoomOcc
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-2">
-        <Calendar className="h-5 w-5 text-primary" />
-        <h2 className="text-xl font-semibold">Relatório de Ocupação</h2>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div className="flex items-center gap-2">
+          <Calendar className="h-5 w-5 text-primary" />
+          <h2 className="text-xl font-semibold">Relatório de Ocupação</h2>
+        </div>
+        
+        <Select value={selectedRoomId} onValueChange={setSelectedRoomId}>
+          <SelectTrigger className="w-[200px]">
+            <SelectValue placeholder="Filtrar por sala" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Todas as salas</SelectItem>
+            {activeRooms.map((room) => (
+              <SelectItem key={room.id} value={room.id}>
+                {room.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {activeRooms.map((room) => {
+        {filteredRooms.map((room) => {
           const roomProfessionals = getRoomProfessionals(room.id);
           const { totalHours, percentage } = calculateRoomOccupancy(room.id);
 
