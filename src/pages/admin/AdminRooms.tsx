@@ -6,6 +6,9 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
+import { Checkbox } from '@/components/ui/checkbox';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Badge } from '@/components/ui/badge';
 import {
   Dialog,
   DialogContent,
@@ -21,7 +24,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Plus, Edit, DoorOpen } from 'lucide-react';
+import { Plus, Edit, DoorOpen, Users } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { RoomOccupancyReport } from '@/components/admin/RoomOccupancyReport';
@@ -64,6 +67,7 @@ export default function AdminRooms() {
     rental_value_cents: 0,
     is_active: true,
   });
+  const [selectedProfessionals, setSelectedProfessionals] = useState<string[]>([]);
 
   useEffect(() => {
     fetchData();
@@ -101,6 +105,11 @@ export default function AdminRooms() {
         rental_value_cents: room.rental_value_cents,
         is_active: room.is_active,
       });
+      // Set professionals already linked to this room
+      const linkedProfessionals = professionals
+        .filter(p => p.room_id === room.id)
+        .map(p => p.id);
+      setSelectedProfessionals(linkedProfessionals);
     } else {
       setEditingRoom(null);
       setFormData({
@@ -109,6 +118,7 @@ export default function AdminRooms() {
         rental_value_cents: 0,
         is_active: true,
       });
+      setSelectedProfessionals([]);
     }
     setIsDialogOpen(true);
   };
@@ -120,6 +130,8 @@ export default function AdminRooms() {
     }
 
     try {
+      let roomId = editingRoom?.id;
+
       if (editingRoom) {
         const { error } = await supabase
           .from('clinic_rooms')
@@ -132,27 +144,67 @@ export default function AdminRooms() {
           .eq('id', editingRoom.id);
 
         if (error) throw error;
-        toast.success('Sala atualizada com sucesso!');
       } else {
-        const { error } = await supabase
+        const { data, error } = await supabase
           .from('clinic_rooms')
           .insert({
             name: formData.name,
             description: formData.description || null,
             rental_value_cents: formData.rental_value_cents,
             is_active: formData.is_active,
-          });
+          })
+          .select('id')
+          .single();
 
         if (error) throw error;
-        toast.success('Sala criada com sucesso!');
+        roomId = data.id;
       }
 
+      // Update professional room assignments
+      if (roomId) {
+        // Remove room_id from professionals that were unselected
+        const previouslyLinked = professionals.filter(p => p.room_id === roomId);
+        const toUnlink = previouslyLinked.filter(p => !selectedProfessionals.includes(p.id));
+        
+        if (toUnlink.length > 0) {
+          const { error: unlinkError } = await supabase
+            .from('professionals')
+            .update({ room_id: null })
+            .in('id', toUnlink.map(p => p.id));
+          
+          if (unlinkError) throw unlinkError;
+        }
+
+        // Add room_id to newly selected professionals
+        if (selectedProfessionals.length > 0) {
+          const { error: linkError } = await supabase
+            .from('professionals')
+            .update({ room_id: roomId })
+            .in('id', selectedProfessionals);
+          
+          if (linkError) throw linkError;
+        }
+      }
+
+      toast.success(editingRoom ? 'Sala atualizada com sucesso!' : 'Sala criada com sucesso!');
       setIsDialogOpen(false);
       fetchData();
     } catch (error: any) {
       console.error('Error saving room:', error);
       toast.error(error.message || 'Erro ao salvar sala');
     }
+  };
+
+  const handleProfessionalToggle = (professionalId: string) => {
+    setSelectedProfessionals(prev => 
+      prev.includes(professionalId)
+        ? prev.filter(id => id !== professionalId)
+        : [...prev, professionalId]
+    );
+  };
+
+  const getRoomProfessionals = (roomId: string) => {
+    return professionals.filter(p => p.room_id === roomId);
   };
 
   const formatCurrency = (cents: number) => {
@@ -183,6 +235,7 @@ export default function AdminRooms() {
               <TableRow>
                 <TableHead>Nome</TableHead>
                 <TableHead>Descrição</TableHead>
+                <TableHead>Funcionários</TableHead>
                 <TableHead>Valor Aluguel</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Ações</TableHead>
@@ -197,39 +250,60 @@ export default function AdminRooms() {
                 </TableRow>
               ) : rooms.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
+                  <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
                     <DoorOpen className="h-12 w-12 mx-auto mb-2 opacity-50" />
                     Nenhuma sala cadastrada
                   </TableCell>
                 </TableRow>
               ) : (
-                rooms.map((room) => (
-                  <TableRow key={room.id}>
-                    <TableCell className="font-medium">{room.name}</TableCell>
-                    <TableCell className="text-muted-foreground">
-                      {room.description || '-'}
-                    </TableCell>
-                    <TableCell>{formatCurrency(room.rental_value_cents)}</TableCell>
-                    <TableCell>
-                      <span className={`px-2 py-1 rounded-full text-xs ${
-                        room.is_active 
-                          ? 'bg-green-100 text-green-700' 
-                          : 'bg-gray-100 text-gray-700'
-                      }`}>
-                        {room.is_active ? 'Ativa' : 'Inativa'}
-                      </span>
-                    </TableCell>
-                    <TableCell>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleOpenDialog(room)}
-                      >
-                        <Edit className="h-4 w-4" />
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))
+                rooms.map((room) => {
+                  const roomProfessionals = getRoomProfessionals(room.id);
+                  return (
+                    <TableRow key={room.id}>
+                      <TableCell className="font-medium">{room.name}</TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {room.description || '-'}
+                      </TableCell>
+                      <TableCell>
+                        {roomProfessionals.length === 0 ? (
+                          <span className="text-muted-foreground text-sm">-</span>
+                        ) : (
+                          <div className="flex flex-wrap gap-1">
+                            {roomProfessionals.slice(0, 2).map(p => (
+                              <Badge key={p.id} variant="secondary" className="text-xs">
+                                {p.name.split(' ')[0]}
+                              </Badge>
+                            ))}
+                            {roomProfessionals.length > 2 && (
+                              <Badge variant="outline" className="text-xs">
+                                +{roomProfessionals.length - 2}
+                              </Badge>
+                            )}
+                          </div>
+                        )}
+                      </TableCell>
+                      <TableCell>{formatCurrency(room.rental_value_cents)}</TableCell>
+                      <TableCell>
+                        <span className={`px-2 py-1 rounded-full text-xs ${
+                          room.is_active 
+                            ? 'bg-green-100 text-green-700' 
+                            : 'bg-gray-100 text-gray-700'
+                        }`}>
+                          {room.is_active ? 'Ativa' : 'Inativa'}
+                        </span>
+                      </TableCell>
+                      <TableCell>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleOpenDialog(room)}
+                        >
+                          <Edit className="h-4 w-4" />
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })
               )}
             </TableBody>
           </Table>
@@ -282,6 +356,62 @@ export default function AdminRooms() {
                   rental_value_cents: Math.round(parseFloat(e.target.value || '0') * 100)
                 })}
               />
+            </div>
+
+            <div>
+              <Label className="flex items-center gap-2">
+                <Users className="h-4 w-4" />
+                Funcionários
+              </Label>
+              <ScrollArea className="h-40 border rounded-md p-3 mt-2">
+                {professionals.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">
+                    Nenhum funcionário cadastrado
+                  </p>
+                ) : (
+                  <div className="space-y-2">
+                    {professionals.map((professional) => {
+                      const isLinkedToOtherRoom = professional.room_id && 
+                        professional.room_id !== editingRoom?.id;
+                      const otherRoom = isLinkedToOtherRoom 
+                        ? rooms.find(r => r.id === professional.room_id)
+                        : null;
+                      
+                      return (
+                        <div 
+                          key={professional.id} 
+                          className="flex items-center space-x-2"
+                        >
+                          <Checkbox
+                            id={`prof-${professional.id}`}
+                            checked={selectedProfessionals.includes(professional.id)}
+                            onCheckedChange={() => handleProfessionalToggle(professional.id)}
+                          />
+                          <label 
+                            htmlFor={`prof-${professional.id}`}
+                            className="text-sm cursor-pointer flex-1 flex items-center gap-2"
+                          >
+                            <span>{professional.name}</span>
+                            <span className="text-muted-foreground text-xs">
+                              ({professional.profession})
+                            </span>
+                            {isLinkedToOtherRoom && otherRoom && (
+                              <Badge variant="outline" className="text-xs">
+                                {otherRoom.name}
+                              </Badge>
+                            )}
+                          </label>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </ScrollArea>
+              {selectedProfessionals.length > 0 && (
+                <p className="text-xs text-muted-foreground mt-1">
+                  {selectedProfessionals.length} funcionário(s) selecionado(s)
+                </p>
+              )}
             </div>
 
             <div className="flex items-center gap-2">
