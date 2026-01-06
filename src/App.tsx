@@ -23,6 +23,7 @@ import AdminAgenda from "./pages/admin/AdminAgenda";
 import AdminPatients from "./pages/admin/AdminPatients";
 import AdminServices from "./pages/admin/AdminServices";
 import AdminReports from "./pages/admin/AdminReports";
+import AdminTrackingReport from "./pages/admin/AdminTrackingReport";
 import AdminSettings from "./pages/admin/AdminSettings";
 import AdminProfessionals from "./pages/admin/AdminProfessionals";
 import AdminFinanceiro from "./pages/admin/AdminFinanceiro";
@@ -141,6 +142,14 @@ const App = () => (
               element={
                 <ProtectedRoute allowedRoles={['admin']}>
                   <AdminReports />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/acompanhamento"
+              element={
+                <ProtectedRoute allowedRoles={['admin']}>
+                  <AdminTrackingReport />
                 </ProtectedRoute>
               }
             />
