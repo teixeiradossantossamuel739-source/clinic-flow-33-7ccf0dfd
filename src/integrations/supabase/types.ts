@@ -58,6 +58,7 @@ export type Database = {
           notes: string | null
           patient_confirmed_at: string | null
           patient_email: string
+          patient_id: string | null
           patient_name: string
           patient_phone: string
           payment_status: string
@@ -79,6 +80,7 @@ export type Database = {
           notes?: string | null
           patient_confirmed_at?: string | null
           patient_email: string
+          patient_id?: string | null
           patient_name: string
           patient_phone: string
           payment_status?: string
@@ -100,6 +102,7 @@ export type Database = {
           notes?: string | null
           patient_confirmed_at?: string | null
           patient_email?: string
+          patient_id?: string | null
           patient_name?: string
           patient_phone?: string
           payment_status?: string
@@ -112,6 +115,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "appointments_patient_id_fkey"
+            columns: ["patient_id"]
+            isOneToOne: false
+            referencedRelation: "patients"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "appointments_professional_uuid_fkey"
             columns: ["professional_uuid"]
@@ -182,6 +192,82 @@ export type Database = {
         }
         Relationships: []
       }
+      medical_records: {
+        Row: {
+          appointment_id: string | null
+          attachments: Json | null
+          chief_complaint: string | null
+          created_at: string
+          diagnosis: string | null
+          follow_up_date: string | null
+          id: string
+          observations: string | null
+          patient_id: string
+          prescription: string | null
+          procedure_performed: string | null
+          professional_id: string
+          record_date: string
+          record_type: string
+          updated_at: string
+        }
+        Insert: {
+          appointment_id?: string | null
+          attachments?: Json | null
+          chief_complaint?: string | null
+          created_at?: string
+          diagnosis?: string | null
+          follow_up_date?: string | null
+          id?: string
+          observations?: string | null
+          patient_id: string
+          prescription?: string | null
+          procedure_performed?: string | null
+          professional_id: string
+          record_date?: string
+          record_type: string
+          updated_at?: string
+        }
+        Update: {
+          appointment_id?: string | null
+          attachments?: Json | null
+          chief_complaint?: string | null
+          created_at?: string
+          diagnosis?: string | null
+          follow_up_date?: string | null
+          id?: string
+          observations?: string | null
+          patient_id?: string
+          prescription?: string | null
+          procedure_performed?: string | null
+          professional_id?: string
+          record_date?: string
+          record_type?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "medical_records_appointment_id_fkey"
+            columns: ["appointment_id"]
+            isOneToOne: false
+            referencedRelation: "appointments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "medical_records_patient_id_fkey"
+            columns: ["patient_id"]
+            isOneToOne: false
+            referencedRelation: "patients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "medical_records_professional_id_fkey"
+            columns: ["professional_id"]
+            isOneToOne: false
+            referencedRelation: "professionals"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       notifications: {
         Row: {
           appointment_id: string | null
@@ -229,6 +315,84 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      patients: {
+        Row: {
+          address: string | null
+          allergies: string | null
+          birth_date: string | null
+          blood_type: string | null
+          chronic_conditions: string | null
+          city: string | null
+          cpf: string
+          created_at: string
+          email: string | null
+          emergency_contact_name: string | null
+          emergency_contact_phone: string | null
+          full_name: string
+          gender: string | null
+          health_insurance: string | null
+          health_insurance_number: string | null
+          id: string
+          is_complete: boolean | null
+          notes: string | null
+          phone: string | null
+          state: string | null
+          updated_at: string
+          whatsapp: string | null
+          zip_code: string | null
+        }
+        Insert: {
+          address?: string | null
+          allergies?: string | null
+          birth_date?: string | null
+          blood_type?: string | null
+          chronic_conditions?: string | null
+          city?: string | null
+          cpf: string
+          created_at?: string
+          email?: string | null
+          emergency_contact_name?: string | null
+          emergency_contact_phone?: string | null
+          full_name: string
+          gender?: string | null
+          health_insurance?: string | null
+          health_insurance_number?: string | null
+          id?: string
+          is_complete?: boolean | null
+          notes?: string | null
+          phone?: string | null
+          state?: string | null
+          updated_at?: string
+          whatsapp?: string | null
+          zip_code?: string | null
+        }
+        Update: {
+          address?: string | null
+          allergies?: string | null
+          birth_date?: string | null
+          blood_type?: string | null
+          chronic_conditions?: string | null
+          city?: string | null
+          cpf?: string
+          created_at?: string
+          email?: string | null
+          emergency_contact_name?: string | null
+          emergency_contact_phone?: string | null
+          full_name?: string
+          gender?: string | null
+          health_insurance?: string | null
+          health_insurance_number?: string | null
+          id?: string
+          is_complete?: boolean | null
+          notes?: string | null
+          phone?: string | null
+          state?: string | null
+          updated_at?: string
+          whatsapp?: string | null
+          zip_code?: string | null
+        }
+        Relationships: []
       }
       professional_blocked_times: {
         Row: {
