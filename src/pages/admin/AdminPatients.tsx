@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { AdminLayout } from '@/components/layout/AdminLayout';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
@@ -70,6 +71,7 @@ interface Patient {
 }
 
 export default function AdminPatients() {
+  const navigate = useNavigate();
   const [patients, setPatients] = useState<Patient[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -330,6 +332,7 @@ export default function AdminPatients() {
                             variant="ghost"
                             size="sm"
                             className="hidden sm:inline-flex"
+                            onClick={() => navigate(`/admin/pacientes/${patient.id}`)}
                           >
                             <FileText className="h-4 w-4" />
                             Prontuário
@@ -341,7 +344,7 @@ export default function AdminPatients() {
                               </Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
-                              <DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => navigate(`/admin/pacientes/${patient.id}`)}>
                                 <FileText className="h-4 w-4 mr-2" />
                                 Ver Prontuário
                               </DropdownMenuItem>
