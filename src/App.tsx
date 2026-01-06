@@ -7,6 +7,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { VisitorGuard } from "@/components/auth/VisitorGuard";
+import { ThemeProvider } from "@/components/ThemeProvider";
 import QuickAccessPage from "./pages/QuickAccessPage";
 import OnboardingPage from "./pages/OnboardingPage";
 import HomePage from "./pages/HomePage";
@@ -43,13 +44,14 @@ const queryClient = new QueryClient();
 
 // App component with AuthProvider wrapping all routes
 const App = () => (
-  <QueryClientProvider client={queryClient}>
-    <BrowserRouter>
-      <AuthProvider>
-        <TooltipProvider>
-          <Toaster />
-          <Sonner />
-          <Routes>
+  <ThemeProvider>
+    <QueryClientProvider client={queryClient}>
+      <BrowserRouter>
+        <AuthProvider>
+          <TooltipProvider>
+            <Toaster />
+            <Sonner />
+            <Routes>
             {/* Quick Access Gate - Initial screen for visitors */}
             <Route path="/" element={<QuickAccessPage />} />
             
@@ -216,12 +218,13 @@ const App = () => (
               }
             />
             
-            <Route path="*" element={<NotFound />} />
-          </Routes>
-        </TooltipProvider>
-      </AuthProvider>
-    </BrowserRouter>
-  </QueryClientProvider>
+              <Route path="*" element={<NotFound />} />
+            </Routes>
+          </TooltipProvider>
+        </AuthProvider>
+      </BrowserRouter>
+    </QueryClientProvider>
+  </ThemeProvider>
 );
 
 export default App;
