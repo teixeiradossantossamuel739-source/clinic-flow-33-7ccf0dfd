@@ -28,6 +28,7 @@ import AdminProfessionals from "./pages/admin/AdminProfessionals";
 import AdminFinanceiro from "./pages/admin/AdminFinanceiro";
 import AdminPayments from "./pages/admin/AdminPayments";
 import AdminRooms from "./pages/admin/AdminRooms";
+import PatientRecord from "./pages/admin/PatientRecord";
 import ProfessionalDashboard from "./pages/admin/ProfessionalDashboard";
 import FuncionarioDashboard from "./pages/funcionario/FuncionarioDashboard";
 import FuncionarioAgenda from "./pages/funcionario/FuncionarioAgenda";
@@ -92,6 +93,14 @@ const App = () => (
               element={
                 <ProtectedRoute allowedRoles={['admin']}>
                   <AdminPatients />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/pacientes/:id"
+              element={
+                <ProtectedRoute allowedRoles={['admin']}>
+                  <PatientRecord />
                 </ProtectedRoute>
               }
             />
